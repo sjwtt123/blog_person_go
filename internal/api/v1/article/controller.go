@@ -31,14 +31,16 @@ type Controller struct {
 	userService        service.UserService
 	viewCountService   service.ViewCountService
 	uploadCleanService service.UploadCleanService
+	uploadPath         string
 }
 
-func NewController(articleService service.ArticleService, userService service.UserService, viewCountService service.ViewCountService, uploadCleanService service.UploadCleanService) *Controller {
+func NewController(articleService service.ArticleService, userService service.UserService, viewCountService service.ViewCountService, uploadCleanService service.UploadCleanService, uploadPath string) *Controller {
 	return &Controller{
 		articleService:     articleService,
 		userService:        userService,
 		viewCountService:   viewCountService,
 		uploadCleanService: uploadCleanService,
+		uploadPath:         uploadPath,
 	}
 }
 
@@ -154,29 +156,30 @@ func (ctrl *Controller) UploadImage(c *gin.Context) {
 		return
 	}
 
-	var uploadDir string
+	var subDir string
 	var maxSize int64
-	var allowedExits []string
+	var allowedExts []string
 
 	switch uploadType {
 	case UploadTypeAvatar:
-		uploadDir = "uploads/avatars/" + time.Now().Format("2006/01")
+		subDir = "avatars"
 		maxSize = 2 * 1024 * 1024
-		allowedExits = []string{".jpg", ".jpeg", ".png", ".webp"}
+		allowedExts = []string{".jpg", ".jpeg", ".png", ".webp"}
 	case UploadTypeCover:
-		uploadDir = "uploads/covers/" + time.Now().Format("2006/01")
+		subDir = "covers"
 		maxSize = 5 * 1024 * 1024
-		allowedExits = []string{".jpg", ".jpeg", ".png", ".gif", ".webp"}
+		allowedExts = []string{".jpg", ".jpeg", ".png", ".gif", ".webp"}
 	case UploadTypeArticle:
-		uploadDir = "uploads/articles/" + time.Now().Format("2006/01")
+		subDir = "articles"
 		maxSize = 5 * 1024 * 1024
-		allowedExits = []string{".jpg", ".jpeg", ".png", ".gif", ".webp"}
+		allowedExts = []string{".jpg", ".jpeg", ".png", ".gif", ".webp"}
 	default:
 		response.BadRequest(c, "图片类型错误")
+		return
 	}
 
 	ext := strings.ToLower(filepath.Ext(file.Filename))
-	if !utils.Contains(allowedExits, ext) {
+	if !utils.Contains(allowedExts, ext) {
 		response.BadRequest(c, "不支持的文件格式")
 		return
 	}
@@ -186,6 +189,7 @@ func (ctrl *Controller) UploadImage(c *gin.Context) {
 		return
 	}
 
+	uploadDir := filepath.Join(ctrl.uploadPath, subDir)
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		response.InternalError(c, "创建目录失败")
 		return
@@ -196,14 +200,14 @@ func (ctrl *Controller) UploadImage(c *gin.Context) {
 		randomStr = time.Now().Format("150405")
 	}
 	filename := time.Now().Format("20060102150405") + "_" + randomStr + ext
-	join := filepath.Join(uploadDir, filename)
+	savePath := filepath.Join(uploadDir, filename)
 
-	if err := c.SaveUploadedFile(file, join); err != nil {
+	if err := c.SaveUploadedFile(file, savePath); err != nil {
 		response.InternalError(c, "保存文件失败")
 		return
 	}
 
-	url := "/" + filepath.ToSlash(join)
+	url := "/" + ctrl.uploadPath + "/" + filepath.ToSlash(filepath.Join(subDir, filename))
 
 	response.Success(c, gin.H{
 		"url": url,
@@ -228,19 +232,5 @@ func (ctrl *Controller) IncrementViewCount(c *gin.Context) {
 
 	response.Success(c, gin.H{
 		"view_count": total,
-	})
-}
-
-// CleanUnusedImages 清理未使用的图片
-func (ctrl *Controller) CleanUnusedImages(c *gin.Context) {
-	deleted, err := ctrl.uploadCleanService.CleanUnusedImages()
-	if err != nil {
-		response.InternalError(c, "清理失败")
-		return
-	}
-
-	response.Success(c, gin.H{
-		"deleted": deleted,
-		"message": "清理完成",
 	})
 }

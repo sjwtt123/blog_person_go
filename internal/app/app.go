@@ -147,7 +147,7 @@ func (a *App) initDependencies() {
 	tagService := service.NewTagService(tagRepo)
 	viewCountSvc := service.NewViewCountService(articleRepo, viewCountRepo)
 	commentSvc := service.NewCommentService(commentRepo, articleRepo, a.mysqlDB)
-	uploadCleanSvc := service.NewUploadCleanService(articleRepo, userRepo)
+	uploadCleanSvc := service.NewUploadCleanService(articleRepo, userRepo, a.cfg.Upload.BasePath)
 
 	// 创建停止通道，用于优雅关闭定时任务
 	a.viewCountStopCh = make(chan struct{})
@@ -160,7 +160,7 @@ func (a *App) initDependencies() {
 	go uploadCleanSvc.StartScheduledClean(a.uploadCleanStopCh)
 
 	// 创建 Router
-	a.router = api.NewRouter(userSvc, authSvc, articleSvc, categorySvc, tagService, viewCountSvc, commentSvc, uploadCleanSvc)
+	a.router = api.NewRouter(userSvc, authSvc, articleSvc, categorySvc, tagService, viewCountSvc, commentSvc, uploadCleanSvc, a.cfg.Upload.BasePath)
 }
 
 // initRouter 初始化路由

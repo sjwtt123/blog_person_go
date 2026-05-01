@@ -25,7 +25,6 @@ func (ctrl *Controller) RegisterRoutes(r *gin.RouterGroup) {
 		adminGroup.PUT("/articles/:id", ctrl.Update)
 		adminGroup.DELETE("/articles/:id", ctrl.Delete)
 		adminGroup.GET("/articles", ctrl.ListAdmin)
-		adminGroup.POST("/clean/images", ctrl.CleanUnusedImages)
 	}
 
 }

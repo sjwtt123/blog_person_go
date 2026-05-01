@@ -33,11 +33,12 @@ func NewRouter(
 	viewCountService service.ViewCountService,
 	commentService service.CommentService,
 	uploadCleanService service.UploadCleanService,
+	uploadPath string,
 ) *Router {
 	return &Router{
 		userCtrl:     user.NewController(userService),
 		authCtrl:     auth.NewController(authService, userService),
-		articleCtrl:  article.NewController(articleService, userService, viewCountService, uploadCleanService),
+		articleCtrl:  article.NewController(articleService, userService, viewCountService, uploadCleanService, uploadPath),
 		categoryCtrl: category.NewController(categoryService, userService),
 		tagCtrl:      tag.NewController(tagService, userService),
 		commentCtrl:  comment.NewController(commentService, userService),

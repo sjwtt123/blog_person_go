@@ -13,16 +13,23 @@ import (
 )
 
 type uploadCleanService struct {
-	articleRepo repository.ArticleRepository
-	userRepo    repository.UserRepository
-	uploadDirs  []string
+	articleRepo   repository.ArticleRepository
+	userRepo      repository.UserRepository
+	uploadAbsPath string
+	uploadDirs    []string
 }
 
-func NewUploadCleanService(articleRepo repository.ArticleRepository, userRepo repository.UserRepository) UploadCleanService {
+func NewUploadCleanService(articleRepo repository.ArticleRepository, userRepo repository.UserRepository, uploadPath string) UploadCleanService {
+	absPath, _ := filepath.Abs(uploadPath)
 	return &uploadCleanService{
-		articleRepo: articleRepo,
-		userRepo:    userRepo,
-		uploadDirs:  []string{"uploads/articles", "uploads/avatars", "uploads/covers"},
+		articleRepo:   articleRepo,
+		userRepo:      userRepo,
+		uploadAbsPath: absPath,
+		uploadDirs: []string{
+			filepath.Join(absPath, "articles"),
+			filepath.Join(absPath, "avatars"),
+			filepath.Join(absPath, "covers"),
+		},
 	}
 }
 
@@ -81,15 +88,23 @@ func (s *uploadCleanService) extractUrls(text string, urls map[string]bool) {
 		return
 	}
 
+	// 支持 /uploads/... 路径
+	s.extractUrlPattern(text, "/uploads/", urls)
+
+	// 支持自定义 URL 路径
+	s.extractUrlPattern(text, "/static/uploads/", urls)
+}
+
+func (s *uploadCleanService) extractUrlPattern(text string, pattern string, urls map[string]bool) {
 	idx := 0
 	for idx < len(text) {
-		pos := strings.Index(text[idx:], "/uploads/")
+		pos := strings.Index(text[idx:], pattern)
 		if pos == -1 {
 			break
 		}
 
 		start := idx + pos
-		end := start + len("/uploads/")
+		end := start + len(pattern)
 
 		for end < len(text) {
 			c := text[end]
@@ -121,12 +136,13 @@ func (s *uploadCleanService) cleanDirectory(dir string, usedUrls map[string]bool
 		}
 
 		if s.isFileOld(path) {
-			url := "/" + filepath.ToSlash(path)
+			relPath, err := filepath.Rel(s.uploadAbsPath, path)
+			if err != nil {
+				return nil
+			}
+			url := "/uploads/" + filepath.ToSlash(relPath)
 			if !usedUrls[url] {
-				if err := os.Remove(path); err == nil {
-					logger.Info("清理未使用图片", zap.String("path", path))
-					deleted++
-				}
+				logger.Warn("发现未使用图片", zap.String("path", path), zap.String("url", url))
 			}
 		}
 

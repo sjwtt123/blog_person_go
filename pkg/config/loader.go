@@ -40,6 +40,11 @@ func Load(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("解析配置文件失败: %w", err)
 	}
 
+	// 设置默认值
+	if config.Upload.BasePath == "" {
+		config.Upload.BasePath = "uploads"
+	}
+
 	// 从环境变量覆盖敏感配置
 	if val := os.Getenv("MYSQL_PASSWORD"); val != "" {
 		config.Database.MySQL.Password = val
@@ -61,13 +66,4 @@ func Get() *Config {
 		panic("配置未初始化，请先调用 Load() 加载配置")
 	}
 	return globalConfig
-}
-
-// MustLoad 加载配置，失败时 panic
-func MustLoad(configPath string) *Config {
-	config, err := Load(configPath)
-	if err != nil {
-		panic(err)
-	}
-	return config
 }

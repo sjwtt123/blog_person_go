@@ -9,6 +9,7 @@ type Config struct {
 	JWT      JWTConfig      `mapstructure:"jwt"`
 	Log      LogConfig      `mapstructure:"log"`
 	CORS     CORSConfig     `mapstructure:"cors"`
+	Upload   UploadConfig   `mapstructure:"upload"`
 }
 
 // AppConfig 应用配置
@@ -70,4 +71,10 @@ type CORSConfig struct {
 	ExposeHeaders    []string `mapstructure:"expose_headers"`
 	AllowCredentials bool     `mapstructure:"allow_credentials"`
 	MaxAge           int      `mapstructure:"max_age"`
+}
+
+// UploadConfig 上传配置
+type UploadConfig struct {
+	BasePath string `mapstructure:"base_path"` // 上传目录（既是物理路径也是 URL 前缀）
+	MaxSize  int64  `mapstructure:"max_size"`  // 最大文件大小(字节)
 }
