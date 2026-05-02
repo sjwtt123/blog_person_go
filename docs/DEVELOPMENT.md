@@ -301,10 +301,38 @@ func (Comment) TableName() string {
 
 ## 9. 路由注册流程
 
-1. 在 `internal/api/routeres.go` 的 `Router` 结构体中添加 controller 字段
-2. 在 `NewRouter` 中创建 controller 实例
-3. 在 `Setup` 方法中调用 `ctrl.RegisterRoutes(v1)`
-4. 在 `internal/app/app.go` 的 `initDependencies` 中创建 Repository 和 Service 并注入
+1. 在 `internal/api/v1/{module}/controller.go` 中定义 `RegisterRoutes` 方法
+2. 在 `internal/api/v1/{module}/router.go` 中可选定义路由分组（也可在 controller.go 中）
+3. 在 `internal/api/router.go` 的 `Router` 结构体中添加 controller 字段
+4. 在 `NewRouter` 中创建 controller 实例
+5. 在 `Setup` 方法中调用 `ctrl.RegisterRoutes(v1)`
+6. 在 `internal/app/app.go` 的 `initDependencies` 中创建 Repository 和 Service 并注入
+
+**示例**:
+```go
+// router.go
+type Router struct {
+    articleCtrl    *article.Controller
+    commentCtrl    *comment.Controller
+    likeCtrl       *like.Controller
+    // ...
+}
+
+func NewRouter(...) *Router {
+    return &Router{
+        articleCtrl: article.NewController(articleSvc),
+        commentCtrl: comment.NewController(commentSvc, userSvc),
+        likeCtrl:    like.NewController(likeSvc, userSvc),
+    }
+}
+
+func (r *Router) Setup(engine *gin.Engine) {
+    v1 := engine.Group("/api/v1")
+    r.articleCtrl.RegisterRoutes(v1)
+    r.commentCtrl.RegisterRoutes(v1)
+    r.likeCtrl.RegisterRoutes(v1)
+}
+```
 
 ## 10. 错误码规范
 
@@ -314,9 +342,31 @@ func (Comment) TableName() string {
 - `400-599` - HTTP 级别错误
 - `1000-1999` - 用户相关
 - `2000-2999` - 参数相关
-- `3000-3999` - 资源相关
+- `3000-3999` - 资源相关（文章、分类、标签、评论等）
+- `3000-3099` - 点赞相关
 
 新增错误码需添加到 `code.go`。
+
+**常用错误码**:
+- `1001` - 用户不存在
+- `1002` - 用户已存在
+- `1003` - 用户名或密码错误
+- `1004` - 用户已被禁用
+- `1005` - 无效的令牌
+- `1006` - 令牌已过期
+- `2001` - 文章不存在
+- `2002` - 文章已存在
+- `2003` - 分类不存在
+- `2004` - 分类已存在
+- `2005` - 标签不存在
+- `2006` - 标签已存在
+- `2007` - 评论不存在
+- `2008` - 禁止评论
+- `3001` - 已点赞
+- `3002` - 未点赞
+- `4001` - 文件上传失败
+- `4002` - 不支持的文件格式
+- `4003` - 文件过大
 
 ## 11. 依赖注入
 

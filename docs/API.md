@@ -219,6 +219,8 @@ Authorization: Bearer {token}
 **请求参数**:
 ```json
 {
+  "username": "testuser",
+  "email": "test@example.com",
   "nickname": "新昵称",
   "avatar": "https://example.com/avatar.jpg"
 }
@@ -226,6 +228,8 @@ Authorization: Bearer {token}
 
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
+| username | string | 是 | 用户名（3-50字符） |
+| email | string | 是 | 邮箱地址 |
 | nickname | string | 否 | 昵称 |
 | avatar | string | 否 | 头像 URL |
 
@@ -333,7 +337,7 @@ GET /api/v1/articles?page=1&size=10&keyword=Go&category_id=1&tag=Go&start_date=2
 |------|------|------|------|
 | page | int | 是 | 页码，从 1 开始 |
 | size | int | 是 | 每页大小，1-100 |
-| keyword | string | 否 | 标题关键词 |
+| keyword | string | 否 | 标题或摘要关键词（支持模糊搜索） |
 | category_id | int | 否 | 分类 ID |
 | tag | string | 否 | 标签名称 |
 | start_date | string | 否 | 开始日期（YYYY-MM-DD） |
@@ -647,7 +651,42 @@ Authorization: Bearer {token}
 
 ### 点赞接口
 
-#### 点赞文章（需认证，每人限一次）
+#### 获取文章点赞数（公开接口，无需认证）
+
+```http
+GET /api/v1/likes/article/:id/count
+```
+
+**响应示例**:
+```json
+{
+  "code": 0,
+  "message": "成功",
+  "data": {
+    "like_count": 21
+  }
+}
+```
+
+#### 获取用户点赞状态（需认证）
+
+```http
+GET /api/v1/likes/article/:id/status
+Authorization: Bearer {token}
+```
+
+**响应示例**:
+```json
+{
+  "code": 0,
+  "message": "成功",
+  "data": {
+    "is_liked": true
+  }
+}
+```
+
+#### 点赞文章（需认证）
 
 ```http
 POST /api/v1/likes/article/:id
@@ -660,7 +699,7 @@ Authorization: Bearer {token}
   "code": 0,
   "message": "点赞成功",
   "data": {
-    "like_count": 21
+    "like_count": 22
   }
 }
 ```
@@ -672,11 +711,30 @@ DELETE /api/v1/likes/article/:id
 Authorization: Bearer {token}
 ```
 
-#### 获取文章点赞数
+**响应示例**:
+```json
+{
+  "code": 0,
+  "message": "取消点赞成功",
+  "data": {
+    "like_count": 21
+  }
+}
+```
+
+#### 获取用户点赞的文章列表（需认证）
 
 ```http
-GET /api/v1/likes/article/:id
+GET /api/v1/likes/my?page=1&size=10
+Authorization: Bearer {token}
 ```
+
+**查询参数**:
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| page | int | 是 | 页码，从 1 开始 |
+| size | int | 是 | 每页大小，1-100 |
 
 **响应示例**:
 ```json
@@ -684,8 +742,35 @@ GET /api/v1/likes/article/:id
   "code": 0,
   "message": "成功",
   "data": {
-    "like_count": 21,
-    "user_liked": true
+    "list": [
+      {
+        "id": 1,
+        "title": "Go 语言入门",
+        "slug": "go-intro",
+        "summary": "Go 语言基础教程",
+        "cover_image": "https://example.com/cover.jpg",
+        "view_count": 100,
+        "like_count": 20,
+        "author": {
+          "id": 1,
+          "username": "admin",
+          "nickname": "管理员"
+        },
+        "category": {
+          "id": 1,
+          "name": "技术",
+          "slug": "tech"
+        },
+        "tags": [
+          {"id": 1, "name": "Go", "slug": "go"}
+        ],
+        "published_at": "2024-01-01T00:00:00Z"
+      }
+    ],
+    "total": 5,
+    "page": 1,
+    "size": 10,
+    "total_page": 1
   }
 }
 ```
