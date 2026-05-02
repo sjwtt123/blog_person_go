@@ -113,6 +113,7 @@ func (a *App) initDatabase() error {
 		&entity.Category{},
 		&entity.Tag{},
 		&entity.Comment{},
+		&entity.Like{},
 	); err != nil {
 		logger.Warn("数据库迁移警告", zap.Error(err))
 	} else {
@@ -137,6 +138,7 @@ func (a *App) initDependencies() {
 	categoryRepo := repository.NewCategoryRepository(a.mysqlDB)
 	tagRepo := repository.NewTagRepository(a.mysqlDB)
 	commentRepo := repository.NewCommentRepository(a.mysqlDB)
+	likeRepo := repository.NewLikeRepository(a.mysqlDB)
 	viewCountRepo := repository.NewViewCountRepository(a.redis)
 
 	// 创建 Service
@@ -148,6 +150,7 @@ func (a *App) initDependencies() {
 	viewCountSvc := service.NewViewCountService(articleRepo, viewCountRepo)
 	commentSvc := service.NewCommentService(commentRepo, articleRepo, a.mysqlDB)
 	uploadCleanSvc := service.NewUploadCleanService(articleRepo, userRepo, a.cfg.Upload.BasePath)
+	likeSvc := service.NewLikeService(likeRepo, articleRepo, a.mysqlDB)
 
 	// 创建停止通道，用于优雅关闭定时任务
 	a.viewCountStopCh = make(chan struct{})
@@ -160,7 +163,7 @@ func (a *App) initDependencies() {
 	go uploadCleanSvc.StartScheduledClean(a.uploadCleanStopCh)
 
 	// 创建 Router
-	a.router = api.NewRouter(userSvc, authSvc, articleSvc, categorySvc, tagService, viewCountSvc, commentSvc, uploadCleanSvc, a.cfg.Upload.BasePath)
+	a.router = api.NewRouter(userSvc, authSvc, articleSvc, categorySvc, tagService, viewCountSvc, commentSvc, likeSvc, uploadCleanSvc, a.cfg.Upload.BasePath)
 }
 
 // initRouter 初始化路由

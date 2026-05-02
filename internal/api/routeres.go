@@ -5,6 +5,7 @@ import (
 	"blog/internal/api/v1/auth"
 	"blog/internal/api/v1/category"
 	"blog/internal/api/v1/comment"
+	"blog/internal/api/v1/like"
 	"blog/internal/api/v1/tag"
 	"blog/internal/api/v1/user"
 	"blog/internal/middleware"
@@ -21,6 +22,7 @@ type Router struct {
 	categoryCtrl *category.Controller
 	tagCtrl      *tag.Controller
 	commentCtrl  *comment.Controller
+	likeCtrl     *like.Controller
 }
 
 // NewRouter 创建路由
@@ -32,6 +34,7 @@ func NewRouter(
 	tagService service.TagService,
 	viewCountService service.ViewCountService,
 	commentService service.CommentService,
+	likeService service.LikeService,
 	uploadCleanService service.UploadCleanService,
 	uploadPath string,
 ) *Router {
@@ -42,6 +45,7 @@ func NewRouter(
 		categoryCtrl: category.NewController(categoryService, userService),
 		tagCtrl:      tag.NewController(tagService, userService),
 		commentCtrl:  comment.NewController(commentService, userService),
+		likeCtrl:     like.NewController(likeService),
 	}
 }
 
@@ -83,5 +87,8 @@ func (r *Router) Setup(engine *gin.Engine) {
 
 		//评论路由
 		r.commentCtrl.RegisterRoutes(v1)
+
+		//点赞路由
+		r.likeCtrl.RegisterRoutes(v1)
 	}
 }

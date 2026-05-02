@@ -15,6 +15,7 @@ type ArticleListItemResponse struct {
 	Summary      string            `json:"summary,omitempty"`
 	CoverImage   string            `json:"cover_image,omitempty"`
 	ViewCount    int               `json:"view_count"`
+	LikeCount    int               `json:"like_count"`
 	CommentCount int               `json:"comment_count"`
 	Author       *AuthorResponse   `json:"author,omitempty"`
 	Category     *CategoryResponse `json:"category,omitempty"`
@@ -33,6 +34,7 @@ type ArticleDetailResponse struct {
 	Content      string            `json:"content,omitempty"`
 	CoverImage   string            `json:"cover_image,omitempty"`
 	ViewCount    int               `json:"view_count"`
+	LikeCount    int               `json:"like_count"`
 	CommentCount int               `json:"comment_count"`
 	Author       *AuthorResponse   `json:"author,omitempty"`
 	Category     *CategoryResponse `json:"category,omitempty"`

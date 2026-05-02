@@ -28,56 +28,67 @@
 ## 项目结构
 
 ```
-cloudque/
+blog-go/
 ├── cmd/
 │   └── server/
-│       └── main.go                    # 主程序入口
+│       └── main.go                    # 主程序入口（20行代码）
 ├── internal/                           # 私有应用代码
 │   ├── app/                           # 应用启动器
-│   │   └── app.go                     # 应用初始化和启动
+│   │   └── app.go                     # 应用初始化、依赖注入、优雅关闭
 │   ├── api/                           # API 层
 │   │   ├── v1/                        # API v1 版本
-│   │   │   ├── auth/                  # 认证模块
-│   │   │   ├── user/                  # 用户模块
-│   │   │   ├── article/               # 文章模块
+│   │   │   ├── auth/                  # 认证模块（注册/登录/刷新Token）
+│   │   │   ├── user/                  # 用户模块（个人信息/关于页/用户管理）
+│   │   │   ├── article/               # 文章模块（CRUD/上传/时间轴/访问量）
 │   │   │   ├── category/              # 分类模块
 │   │   │   ├── tag/                   # 标签模块
-│   │   │   ├── comment/               # 评论模块
-│   │   │   └── admin/                 # 后台管理模块
-│   │   └── router.go                  # 路由注册
-│   ├── service/                       # 业务逻辑层
-│   ├── repository/                    # 数据访问层
+│   │   │   └── comment/               # 评论模块
+│   │   └── routeres.go                # 路由注册
+│   ├── service/                       # 业务逻辑层（接口+实现）
+│   │   ├── *_interface.go             # Service接口定义
+│   │   └── *_service.go               # Service实现
+│   ├── repository/                    # 数据访问层（接口+实现）
+│   │   ├── *_interface.go             # Repository接口定义
+│   │   └── *_repository.go            # Repository实现
 │   ├── model/                         # 数据模型
-│   │   ├── entity/                    # 数据库实体
+│   │   ├── entity/                    # 数据库实体（User/Article/Category等）
 │   │   └── dto/                       # 数据传输对象
-│   └── middleware/                    # 中间件
+│   │       ├── request/               # 请求参数DTO
+│   │       └── response/              # 响应数据DTO
+│   └── middleware/                    # 中间件（Auth/Admin/CORS/Logger/Recovery）
 ├── pkg/                               # 公共工具包
-│   ├── config/                        # 配置管理
-│   ├── logger/                        # 日志系统
-│   ├── database/                      # 数据库管理
-│   ├── jwt/                           # JWT 工具
-│   ├── response/                      # 统一响应
-│   ├── errors/                        # 错误处理
-│   ├── upload/                        # 文件上传工具
-│   └── utils/                         # 工具函数
-├── configs/                           # 配置文件
-│   ├── config.yaml                    # 主配置
-│   └── config.yaml.example            # 配置示例
-├── scripts/                           # 脚本
-│   └── migrate.sql                    # 数据库迁移
+│   ├── config/                        # 配置管理（Viper）
+│   ├── logger/                        # 日志系统（Zap + Lumberjack）
+│   ├── database/                      # 数据库管理（MySQL + Redis）
+│   ├── jwt/                           # JWT工具（生成/解析/刷新）
+│   ├── response/                      # 统一响应格式
+│   ├── errors/                        # 业务错误处理（BizError）
+│   ├── util/                         # 工具函数（slug生成）
+│   └── utils/                         # 工具函数（分页/字符串/时间）
+├── configs/
+│   └── config.yaml.example            # 配置文件示例
+├── scripts/
+│   └── migrate.sql                    # 数据库迁移脚本
 ├── docs/                              # 项目文档
-│   ├── ARCHITECTURE.md                # 架构设计
-│   ├── DEVELOPMENT.md                 # 开发指南
-│   └── API.md                         # API 文档
 ├── uploads/                           # 上传文件存储
-│   └── articles/                      # 文章图片
-├── .env.example                       # 环境变量示例
-├── .gitignore
+│   ├── articles/                      # 文章图片
+│   ├── covers/                        # 封面图片
+│   └── avatars/                       # 用户头像
 ├── Makefile                           # 构建命令
-├── go.mod                             # Go 模块
+├── go.mod                             # Go 模块定义
 └── README.md                          # 项目说明
 ```
 
+### 架构设计说明
+
+**后台管理路由设计：**
+- 采用**分散式管理**，各业务模块内部包含自己的 admin 路由组
+- 不使用独立的 `admin/` 目录，而是通过中间件 `middleware.Admin()` 控制权限
+- Admin路由统一使用 `/api/v1/admin/*` 前缀，例如：
+  - `/api/v1/admin/articles` - 文章管理
+  - `/api/v1/admin/users` - 用户管理
+  - `/api/v1/admin/categories` - 分类管理
+  - `/api/v1/admin/comments` - 评论管理
 ## 快速开始
 
 ### 前置要求
@@ -144,99 +155,121 @@ make run
 GET /api/v1/health
 ```
 
-#### 用户认证
+#### 用户认证（公开）
 ```
 POST /api/v1/auth/register  # 用户注册
 POST /api/v1/auth/login     # 用户登录
 POST /api/v1/auth/refresh   # 刷新 Token
 ```
 
+#### 关于页面（公开）
+```
+GET /api/v1/about           # 获取关于页信息
+```
+
 #### 用户管理（需认证）
 ```
-GET /api/v1/user/profile    # 获取用户信息
-PUT /api/v1/user/profile    # 更新用户信息
-POST /api/v1/user/password  # 修改密码
+GET  /api/v1/user/profile    # 获取用户信息
+PUT  /api/v1/user/profile    # 更新用户信息
+POST /api/v1/user/password   # 修改密码
+POST /api/v1/user/upload/image  # 上传图片（文章/封面/头像）
 ```
 
 #### 文章管理
+**公开接口：**
 ```
-GET  /api/v1/articles              # 获取文章列表（分页、筛选）
-GET  /api/v1/articles/:id          # 获取文章详情
-POST /api/v1/articles              # 创建文章（需认证）
-PUT  /api/v1/articles/:id          # 更新文章（需认证）
-DELETE /api/v1/articles/:id        # 删除文章（需认证）
-GET  /api/v1/articles/category/:id # 按分类获取文章
-GET  /api/v1/articles/tag/:tag     # 按标签获取文章
+GET /api/v1/articles              # 获取文章列表（分页、筛选、搜索）
+GET /api/v1/articles/:id          # 获取文章详情
+GET /api/v1/articles/timelines    # 获取时间轴数据
+PUT /api/v1/articles/:id/view     # 增加访问量（Redis缓存）
+GET /api/v1/articles/category/:id # 按分类获取文章
+GET /api/v1/articles/tag/:tag     # 按标签获取文章
+```
+
+**管理员接口：**
+```
+POST   /api/v1/admin/articles      # 创建文章
+PUT    /api/v1/admin/articles/:id  # 更新文章
+DELETE /api/v1/admin/articles/:id  # 删除文章
+GET    /api/v1/admin/articles      # 管理员文章列表（含草稿/隐藏）
 ```
 
 #### 文章分类
+**公开接口：**
 ```
-GET /api/v1/categories             # 获取所有分类
-GET /api/v1/categories/:id         # 获取分类详情
-POST /api/v1/categories            # 创建分类（需认证）
-PUT /api/v1/categories/:id         # 更新分类（需认证）
-DELETE /api/v1/categories/:id      # 删除分类（需认证）
+GET /api/v1/categories             # 获取所有分类（含文章数量）
 ```
 
-#### 标签管理
+**管理员接口：**
 ```
-GET /api/v1/tags                   # 获取所有标签
-GET /api/v1/tags/:id               # 获取标签详情
-POST /api/v1/tags                  # 创建标签（需认证）
-PUT /api/v1/tags/:id               # 更新标签（需认证）
-DELETE /api/v1/tags/:id            # 删除标签（需认证）
-```
-
-#### 评论管理
-```
-GET    /api/v1/comments/article/:id  # 获取文章评论列表
-POST   /api/v1/comments              # 发布评论（需认证）
-PUT    /api/v1/comments/:id          # 更新评论（需认证）
-DELETE /api/v1/comments/:id          # 删除评论（需认证）
-```
-
-#### 点赞管理
-```
-POST /api/v1/likes/article/:id     # 点赞文章（需认证）
-DELETE /api/v1/likes/article/:id   # 取消点赞（需认证）
-GET  /api/v1/likes/article/:id     # 获取文章点赞数
-```
-
-#### 文件上传
-```
-POST /api/v1/upload/image          # 上传图片（需认证）
-```
-
-#### 后台管理（需管理员权限）
-```
-# 文章管理
-GET    /api/v1/admin/articles      # 获取所有文章（分页）
-POST   /api/v1/admin/articles      # 创建文章
-PUT    /api/v1/admin/articles/:id   # 更新文章
-DELETE /api/v1/admin/articles/:id   # 删除文章
-
-# 分类管理
-GET    /api/v1/admin/categories    # 获取所有分类
-POST   /api/v1/admin/categories    # 创建分类
+POST   /api/v1/admin/categories     # 创建分类
 PUT    /api/v1/admin/categories/:id # 更新分类
 DELETE /api/v1/admin/categories/:id # 删除分类
+```
 
-# 标签管理
-GET    /api/v1/admin/tags          # 获取所有标签
+> ⚠️ **待实现**: `GET /api/v1/categories/:id` - 分类详情接口
+
+#### 标签管理
+**公开接口：**
+```
+GET /api/v1/tags                   # 获取所有标签（含文章数量）
+```
+
+**管理员接口：**
+```
 POST   /api/v1/admin/tags          # 创建标签
 PUT    /api/v1/admin/tags/:id      # 更新标签
 DELETE /api/v1/admin/tags/:id      # 删除标签
-
-# 评论管理
-GET    /api/v1/admin/comments      # 获取所有评论（分页）
-DELETE /api/v1/admin/comments/:id  # 删除评论
-
-# 用户管理
-GET    /api/v1/admin/users         # 获取用户列表（分页）
-PUT    /api/v1/admin/users/:id     # 更新用户状态
-DELETE /api/v1/admin/users/:id     # 删除用户
 ```
 
+> ⚠️ **待实现**: `GET /api/v1/tags/:id` - 标签详情接口
+
+#### 评论管理
+**公开接口：**
+```
+GET /api/v1/articles/:id/comments  # 获取文章评论列表
+```
+
+**需认证接口：**
+```
+POST   /api/v1/user/articles/:id/comments  # 发布评论
+PUT    /api/v1/user/comments/:id           # 更新自己的评论
+DELETE /api/v1/user/comments/:id           # 删除自己的评论
+```
+
+**管理员接口：**
+```
+GET    /api/v1/admin/comments       # 获取所有评论（分页）
+DELETE /api/v1/admin/comments/:id   # 删除任意评论
+```
+
+#### 点赞功能
+
+**公开接口：**
+```
+GET /api/v1/likes/article/:id   # 获取文章点赞数和状态
+```
+
+**需认证接口：**
+```
+POST   /api/v1/likes/article/:id   # 点赞文章
+DELETE /api/v1/likes/article/:id   # 取消点赞
+GET    /api/v1/likes/user/articles # 获取用户点赞的文章列表
+```
+
+**实现说明：**
+- 使用数据库事务保证点赞记录和点赞数的一致性
+- 防止重复点赞和取消不存在的点赞
+- 支持未登录用户查看点赞数
+
+#### 后台管理 - 用户（需管理员权限）
+```
+GET    /api/v1/admin/users         # 获取用户列表
+POST   /api/v1/admin/users         # 创建用户
+PUT    /api/v1/admin/users/:id     # 更新用户
+DELETE /api/v1/admin/users/:id     # 删除用户
+PUT    /api/v1/admin/about         # 更新关于页内容
+```
 ### API 测试
 
 #### 用户注册
@@ -307,27 +340,30 @@ curl -X POST http://localhost:8080/api/v1/articles \
 
 #### 发布评论（需要 Token）
 ```bash
-curl -X POST http://localhost:8080/api/v1/comments \
+curl -X POST http://localhost:8080/api/v1/user/articles/1/comments \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN_HERE" \
   -d '{
-    "article_id": 1,
     "content": "写得很棒！学到了很多",
     "parent_id": 0
   }'
 ```
 
-#### 点赞文章（需要 Token）
-```bash
-curl -X POST http://localhost:8080/api/v1/likes/article/1 \
-  -H "Authorization: Bearer YOUR_TOKEN_HERE"
-```
-
 #### 上传图片（需要 Token）
 ```bash
-curl -X POST http://localhost:8080/api/v1/upload/image \
+curl -X POST http://localhost:8080/api/v1/user/upload/image \
   -H "Authorization: Bearer YOUR_TOKEN_HERE" \
   -F "file=@/path/to/image.jpg"
+```
+
+#### 获取时间轴数据
+```bash
+curl http://localhost:8080/api/v1/articles/timelines
+```
+
+#### 增加文章访问量
+```bash
+curl -X PUT http://localhost:8080/api/v1/articles/1/view
 ```
 
 ## Makefile 命令
@@ -394,51 +430,58 @@ make help         # 显示帮助
 ## 核心特性
 
 ### 基础架构
-- ✅ 标准 MVC 三层架构
-- ✅ 应用启动器（App Launcher）- 统一管理初始化流程
-- ✅ 依赖注入设计
-- ✅ 接口隔离原则
+- ✅ 标准 MVC 三层架构（Controller → Service → Repository）
+- ✅ 应用启动器（App Launcher）- 统一管理初始化流程，main.go 仅 20 行
+- ✅ 依赖注入设计（构造函数注入）
+- ✅ 接口隔离原则（Service 和 Repository 都有接口定义）
+- ✅ 优雅关闭（Graceful Shutdown）
 
 ### 用户系统
-- ✅ JWT 认证机制
-- ✅ 用户注册/登录
+- ✅ JWT 认证机制（Access Token + Refresh Token）
+- ✅ 用户注册/登录（用户名+密码）
 - ✅ 密码加密存储（bcrypt）
-- ✅ 用户信息管理
-- ✅ 管理员权限控制
+- ✅ 用户信息管理（昵称、邮箱、头像）
+- ✅ 管理员权限控制（基于角色的访问控制 RBAC）
+- ✅ 关于页面管理
 
 ### 博客功能
-- ✅ 文章发布与管理
+- ✅ 文章发布与管理（草稿/发布/隐藏状态）
 - ✅ 文章分页展示
-- ✅ 多条件筛选（标题、标签、时间）
-- ✅ 文章分类（技术、生活等）
+- ✅ 多条件筛选（标题、分类、标签、状态）
+- ✅ 文章搜索（关键词搜索）
+- ✅ 文章分类（支持层级分类）
 - ✅ 标签管理
 - ✅ Markdown 格式支持
-- ✅ 图片上传功能
+- ✅ 图片上传功能（文章图片、封面图、头像）
+- ✅ Slug 友好URL生成
+- ✅ **时间轴展示** - 按时间归档文章
+- ✅ **访问量统计** - Redis缓存 + 定时同步MySQL（每5分钟）
+- ✅ **图片清理服务** - 定时清理未使用图片（每24小时）
 
 ### 互动功能
-- ✅ 评论系统（支持回复）
-- ✅ 文章点赞（防重复）
+- ✅ 评论系统（支持回复和嵌套评论）
+- ✅ 评论事务处理（创建/删除时自动更新文章评论数）
 - ✅ 评论仅登录用户可发
-- ✅ 点赞任意但每人限一次
+- ✅ 点赞功能（支持点赞/取消点赞/点赞数统计）
 
 ### 后台管理
-- ✅ 文章增删改查
-- ✅ 分类管理
+- ✅ 文章增删改查（管理员可管理所有状态的文章）
+- ✅ 分类管理（创建/编辑/删除）
+- ✅ 标签管理
 - ✅ 标签管理
 - ✅ 评论管理
 - ✅ 用户管理
 
 ### 技术特性
-- ✅ 统一响应格式
-- ✅ 统一错误处理
-- ✅ 分页查询支持
-- ✅ 结构化日志（Zap）
-- ✅ 日志轮转（Lumberjack）
-- ✅ 配置管理（Viper）
+- ✅ 统一响应格式（`pkg/response`）
+- ✅ 统一错误处理（`pkg/errors` - BizError）
+- ✅ 分页查询支持（`pkg/utils/pagination.go`）
+- ✅ 结构化日志（Zap + Lumberjack）
+- ✅ 配置管理（Viper，支持环境变量覆盖）
 - ✅ 数据库迁移（GORM AutoMigrate）
 - ✅ 优雅关闭（Graceful Shutdown）
-- ✅ CORS 支持
-- ✅ 中间件系统（Logger/Recovery/CORS/Auth）
+- ✅ CORS 跨域支持
+- ✅ 中间件系统（Logger/Recovery/CORS/Auth/Admin）
 
 ---
 
@@ -446,42 +489,62 @@ make help         # 显示帮助
 
 ### 主要数据表
 
-- **users** - 用户表
-- **articles** - 文章表
-- **categories** - 分类表
-- **tags** - 标签表
-- **article_tags** - 文章与标签关联表
-- **comments** - 评论表
-- **likes** - 点赞表
-- **admin_users** - 管理员表
+| 表名 | 说明 | 状态 |
+|------|------|------|
+| **users** | 用户表 | ✅ 已使用 |
+| **articles** | 文章表 | ✅ 已使用 |
+| **categories** | 分类表 | ✅ 已使用 |
+| **tags** | 标签表 | ✅ 已使用 |
+| **article_tags** | 文章与标签关联表 | ✅ 已使用 |
+| **comments** | 评论表 | ✅ 已使用 |
+| **likes** | 点赞表 | ✅ 已使用 |
 
 详细数据库设计请查看 [scripts/migrate.sql](scripts/migrate.sql)
 
 ---
 
-## 开发计划
+## 开发进度
 
-- [ ] 文章搜索功能（全文检索）
-- [ ] 文章浏览量统计
+### ✅ 已完成功能
+- [x] 用户认证系统（注册/登录/JWT/刷新Token）
+- [x] 文章管理（CRUD/分页/搜索/筛选）
+- [x] 分类和标签管理
+- [x] 评论系统（支持回复/嵌套评论）
+- [x] 图片上传功能
+- [x] 访问量统计（Redis缓存+定时同步）
+- [x] 时间轴展示
+- [x] 关于页面管理
+- [x] 后台管理界面API
+- [x] Slug友好URL生成
+- [x] 图片清理服务
+
+### 🔄 进行中 / 待开发
 - [ ] 评论通知功能
 - [ ] RSS 订阅支持
-- [ ] 站点地图生成
-- [ ] SEO 优化
-- [ ] 文章草稿箱
-- [ ] 定时发布
-- [ ] 文章版本管理
-- [ ] 第三方登录（GitHub、Google）
+- [ ] 站点地图生成（Sitemap）
+- [ ] SEO 优化（Meta标签、结构化数据）
+- [ ] 定时发布功能
+- [ ] 文章版本管理/历史记录
+- [ ] 第三方登录（GitHub、Google等）
+- [ ] 全文检索引擎集成（Elasticsearch/Meilisearch）
+- [ ] 文章导出（PDF/Word）
+- [ ] 多语言支持（i18n）
 
 ---
 
 ## 注意事项
 
-1. **图片上传**: 需要配置上传目录权限，或使用云存储服务
-2. **JWT 安全**: 请妥善保管 JWT_SECRET，定期更换
-3. **数据库备份**: 定期备份 MySQL 数据库
-4. **日志管理**: 定期清理日志文件，避免占用过多磁盘空间
-5. **性能优化**: 大数据量时建议添加 Redis 缓存
-6. **评论审核**: 建议开启评论审核功能，防止垃圾评论
+1. **图片上传**: 需要配置上传目录权限（`uploads/`），或使用云存储服务
+2. **JWT 安全**: 请妥善保管 `JWT_SECRET`，定期更换，建议使用环境变量注入
+3. **数据库备份**: 定期备份 MySQL 数据库，建议配置自动备份策略
+4. **日志管理**: 日志文件存储在 `logs/` 目录，Lumberjack 会自动轮转和清理旧日志
+5. **Redis 依赖**: 访问量统计功能依赖 Redis，请确保 Redis 服务正常运行
+6. **定时任务**: 项目包含两个后台定时任务：
+   - **访问量同步**：每5分钟将 Redis 中的访问量同步到 MySQL
+   - **图片清理**：每24小时清理未使用的图片文件
+7. **性能优化**: 大数据量时已通过 Redis 缓存访问量，可考虑添加更多缓存层
+8. **评论审核**: 建议开启评论审核功能，防止垃圾评论（待实现）
+9. **Slug 冲突**: 系统会自动生成文章 Slug，如遇冲突会追加随机后缀
 
 ---
 

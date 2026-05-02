@@ -141,6 +141,14 @@ func (r *articleRepository) UpdateCommentCountInTx(tx *gorm.DB, id uint, count i
 	return tx.Model(&entity.Article{}).Where("id = ?", id).Update("comment_count", count).Error
 }
 
+func (r *articleRepository) UpdateLikeCount(id uint, count int) error {
+	return r.db.Model(&entity.Article{}).Where("id = ?", id).Update("like_count", count).Error
+}
+
+func (r *articleRepository) UpdateLikeCountInTx(tx *gorm.DB, id uint, count int) error {
+	return tx.Model(&entity.Article{}).Where("id = ?", id).Update("like_count", count).Error
+}
+
 func (r *articleRepository) ListAll() ([]*entity.Article, error) {
 	var list []*entity.Article
 	err := r.db.Model(&entity.Article{}).

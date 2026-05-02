@@ -11,6 +11,7 @@ type Article struct {
 	Content      string     `gorm:"type:longtext;not null;comment:文章内容" json:"content"`
 	CoverImage   string     `gorm:"type:varchar(500);comment:封面图片" json:"cover_image"`
 	ViewCount    int        `gorm:"type:int unsigned;default:0;comment:浏览次数" json:"view_count"`
+	LikeCount    int        `gorm:"type:int unsigned;default:0;comment:点赞数" json:"like_count"`
 	CommentCount int        `gorm:"type:int unsigned;default:0;comment:评论数" json:"comment_count"`
 	Status       int        `gorm:"type:tinyint;default:1;index;comment:状态:1发布,2草稿,3隐藏" json:"status"`
 	PublishedAt  *time.Time `gorm:"index;comment:发布时间" json:"published_at"`

@@ -32,6 +32,8 @@ type ArticleRepository interface {
 	UpdateViewCountInTx(tx *gorm.DB, id uint, count uint) error
 	UpdateCommentCount(id uint, count int) error
 	UpdateCommentCountInTx(tx *gorm.DB, id uint, count int) error
+	UpdateLikeCount(id uint, count int) error
+	UpdateLikeCountInTx(tx *gorm.DB, id uint, count int) error
 
 	ListAll() ([]*entity.Article, error)
 }
