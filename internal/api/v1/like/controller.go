@@ -58,26 +58,39 @@ func (ctrl *Controller) UnlikeArticle(c *gin.Context) {
 	response.Success(c, data)
 }
 
-// GetArticleLikeStatus 获取文章点赞状态（未登录用户仅返回点赞数）
-func (ctrl *Controller) GetArticleLikeStatus(c *gin.Context) {
+// GetArticleLikeCount 获取文章点赞数（公开接口，无需登录）
+func (ctrl *Controller) GetArticleLikeCount(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || id == 0 {
 		response.BadRequest(c, "id 参数错误")
 		return
 	}
 
-	var userID uint
-	if middleware.IsLoggedIn(c) {
-		userID = middleware.GetUserID(c)
-	}
-
-	data, err := ctrl.likeService.GetArticleLikeStatus(userID, uint(id))
+	count, err := ctrl.likeService.GetArticleLikeCount(uint(id))
 	if err != nil {
 		response.BizError(c, err)
 		return
 	}
 
-	response.Success(c, data)
+	response.Success(c, gin.H{"like_count": count})
+}
+
+// GetUserLikeStatus 获取用户点赞状态（需要登录）
+func (ctrl *Controller) GetUserLikeStatus(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		response.BadRequest(c, "id 参数错误")
+		return
+	}
+
+	userID := middleware.GetUserID(c)
+	isLiked, err := ctrl.likeService.GetUserLikeStatus(userID, uint(id))
+	if err != nil {
+		response.BizError(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{"is_liked": isLiked})
 }
 
 // ListUserLikedArticles 获取用户点赞的文章列表

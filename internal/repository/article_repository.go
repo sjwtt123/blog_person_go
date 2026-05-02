@@ -53,7 +53,7 @@ func (r *articleRepository) List(filter ArticleListFilter) ([]*entity.Article, i
 	}
 
 	if filter.Keyword != "" {
-		db = db.Where("articles.title LIKE ?", "%"+filter.Keyword+"%")
+		db = db.Where("articles.title LIKE ? OR articles.summary LIKE ?", "%"+filter.Keyword+"%", "%"+filter.Keyword+"%")
 	}
 
 	if filter.CategoryID != nil && *filter.CategoryID > 0 {

@@ -81,14 +81,27 @@ func (s *likeService) UnlikeArticle(userID uint, articleID uint) (*response.Like
 	return s.buildLikeResponse(userID, articleID)
 }
 
-// GetArticleLikeStatus 获取文章点赞状态
-func (s *likeService) GetArticleLikeStatus(userID uint, articleID uint) (*response.LikeResponse, error) {
+// GetArticleLikeCount 获取文章点赞数（公开接口）
+func (s *likeService) GetArticleLikeCount(articleID uint) (int, error) {
+	article, err := s.validateArticleExists(articleID)
+	if err != nil {
+		return 0, err
+	}
+	return article.LikeCount, nil
+}
+
+// GetUserLikeStatus 获取用户点赞状态（需登录）
+func (s *likeService) GetUserLikeStatus(userID uint, articleID uint) (bool, error) {
 	_, err := s.validateArticleExists(articleID)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 
-	return s.buildLikeResponse(userID, articleID)
+	like, err := s.likeRepo.FindByUserAndTarget(userID, articleID, "article")
+	if err != nil {
+		return false, err
+	}
+	return like != nil, nil
 }
 
 // ListUserLikedArticles 获取用户点赞的文章列表

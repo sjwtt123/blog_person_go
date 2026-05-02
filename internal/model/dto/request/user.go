@@ -15,7 +15,7 @@ type LoginRequest struct {
 
 // UpdateUserRequest 更新用户信息请求
 type UpdateUserRequest struct {
-	Username string `json:"username" binding:"omitempty,max=50"`
+	Username string `json:"username" binding:"required,min=3,max=50"`
 	Email    string `json:"email" binding:"required,email"`
 	Avatar   string `json:"avatar" binding:"omitempty,max=255"`
 }
