@@ -1,6 +1,7 @@
 package repository
 
 import "blog/internal/model/entity"
+)
 
 type TagRepository interface {
 	FindTagByID(id uint) (*entity.Tag, error)
@@ -9,5 +10,5 @@ type TagRepository interface {
 	ListAll() ([]*entity.Tag, error)
 	Create(tag *entity.Tag) error
 	Update(tag *entity.Tag) error
-	Delete(id uint) error
+	UpdatePostCountInTx(tx *gorm.DB, id uint, count int) error
 }
