@@ -104,6 +104,10 @@ func (s *userService) ChangePassword(id uint, req *request.ChangePasswordRequest
 		return err
 	}
 
+	if req.NewPassword != req.ConfirmPassword {
+		return bizerrors.New(bizerrors.CodeInvalidParam, "两次输入的密码不一致")
+	}
+
 	// 加密新密码
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
 	if err != nil {

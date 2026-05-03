@@ -17,3 +17,11 @@ type ResetPasswordRequest struct {
 	NewPassword     string `json:"newPassword" binding:"required,min=8,max=50"`
 	ConfirmPassword string `json:"confirmPassword" binding:"required,min=8,max=50"`
 }
+
+// LoginRequest 用户登录请求
+type LoginRequest struct {
+	Username    string `json:"username" binding:"required"`
+	Password    string `json:"password" binding:"required"`
+	CaptchaID   string `json:"captchaId" binding:"required"`
+	CaptchaCode string `json:"captchaCode" binding:"required"`
+}

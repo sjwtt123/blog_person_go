@@ -3,6 +3,7 @@ package auth
 import (
 	"blog/internal/model/dto/request"
 	"blog/internal/service"
+	"blog/pkg/captcha"
 	"blog/pkg/response"
 
 	"github.com/gin-gonic/gin"
@@ -98,6 +99,20 @@ func (ctrl *Controller) Login(c *gin.Context) {
 	}
 
 	response.Success(c, resp)
+}
+
+// GetCaptcha 获取图形验证码
+func (ctrl *Controller) GetCaptcha(c *gin.Context) {
+	id, b64s, err := captcha.GenerateCaptcha()
+	if err != nil {
+		response.InternalError(c, "验证码生成失败")
+		return
+	}
+
+	response.Success(c, map[string]string{
+		"id":      id,
+		"captcha": b64s,
+	})
 }
 
 // RefreshToken 刷新 Token

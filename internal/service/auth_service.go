@@ -1,6 +1,7 @@
 package service
 
 import (
+	"blog/pkg/captcha"
 	"blog/pkg/logger"
 	"crypto/rand"
 	"crypto/tls"
@@ -50,6 +51,11 @@ func NewAuthService(userRepo repository.UserRepository, authRepo repository.Auth
 
 // Login 用户登录
 func (s *authService) Login(req *request.LoginRequest) (*dto.LoginResponse, error) {
+	// 验证图形验证码
+	if !captcha.VerifyCaptcha(req.CaptchaID, req.CaptchaCode) {
+		return nil, bizerrors.New(bizerrors.CodeInvalidParam, "验证码错误")
+	}
+
 	// 根据用户名查找用户
 	user, err := s.userRepo.FindByUsername(req.Username)
 	if err != nil {

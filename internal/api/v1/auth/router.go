@@ -8,6 +8,7 @@ import (
 func (ctrl *Controller) RegisterRoutes(r *gin.RouterGroup) {
 	authGroup := r.Group("/auth")
 	{
+		authGroup.GET("/captcha", ctrl.GetCaptcha)
 		authGroup.POST("/register", ctrl.Register)
 		authGroup.POST("/login", ctrl.Login)
 		authGroup.POST("/refresh", ctrl.RefreshToken)

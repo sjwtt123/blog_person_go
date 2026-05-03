@@ -9,12 +9,6 @@ type RegisterRequest struct {
 	Code            string `json:"code" binding:"required,len=6"`
 }
 
-// LoginRequest 用户登录请求
-type LoginRequest struct {
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
-}
-
 // UpdateUserRequest 更新用户信息请求
 type UpdateUserRequest struct {
 	Username string `json:"username" binding:"required,min=3,max=50"`
@@ -42,7 +36,8 @@ type AdminUserUpdateRequest struct {
 
 // ChangePasswordRequest 修改密码请求
 type ChangePasswordRequest struct {
-	NewPassword string `json:"new_password" binding:"required,min=6,max=50"`
+	NewPassword     string `json:"newPassword" binding:"required,min=6,max=50"`
+	ConfirmPassword string `json:"confirmPassword" binding:"required,min=6,max=50"`
 }
 
 // UserListRequest 用户列表请求
