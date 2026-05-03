@@ -19,8 +19,25 @@ func (r *commentRepository) Create(comment *entity.Comment) error {
 	return r.db.Create(comment).Error
 }
 
-func (r *commentRepository) CreateInTx(tx *gorm.DB, comment *entity.Comment) error {
-	return tx.Create(comment).Error
+func (r *commentRepository) CreateWithArticleCount(comment *entity.Comment, articleID uint) error {
+	tx := r.db.Begin()
+	defer func() {
+		if rec := recover(); rec != nil {
+			tx.Rollback()
+		}
+	}()
+
+	if err := tx.Create(comment).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Model(&entity.Article{}).Where("id = ?", articleID).Update("comment_count", gorm.Expr("comment_count + 1")).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
 }
 
 func (r *commentRepository) FindByID(id uint) (*entity.Comment, error) {
@@ -104,8 +121,25 @@ func (r *commentRepository) Delete(id uint) error {
 	return r.db.Delete(&entity.Comment{}, id).Error
 }
 
-func (r *commentRepository) DeleteInTx(tx *gorm.DB, id uint) error {
-	return tx.Delete(&entity.Comment{}, id).Error
+func (r *commentRepository) DeleteWithArticleCount(commentID uint, articleID uint) error {
+	tx := r.db.Begin()
+	defer func() {
+		if rec := recover(); rec != nil {
+			tx.Rollback()
+		}
+	}()
+
+	if err := tx.Delete(&entity.Comment{}, commentID).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Model(&entity.Article{}).Where("id = ?", articleID).Update("comment_count", gorm.Expr("comment_count - 1")).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
 }
 
 func (r *commentRepository) CountByArticleID(articleID uint) (int64, error) {

@@ -9,14 +9,18 @@ import (
 )
 
 type articleRepository struct {
-	db  *gorm.DB
-	rdb *redis.Client
+	db           *gorm.DB
+	rdb          *redis.Client
+	categoryRepo CategoryRepository
+	tagRepo      TagRepository
 }
 
-func NewArticleRepository(db *gorm.DB, rdb *redis.Client) ArticleRepository {
+func NewArticleRepository(db *gorm.DB, rdb *redis.Client, categoryRepo CategoryRepository, tagRepo TagRepository) ArticleRepository {
 	return &articleRepository{
-		db:  db,
-		rdb: rdb,
+		db:           db,
+		rdb:          rdb,
+		categoryRepo: categoryRepo,
+		tagRepo:      tagRepo,
 	}
 }
 
@@ -92,25 +96,189 @@ func (r *articleRepository) List(filter ArticleListFilter) ([]*entity.Article, i
 }
 
 func (r *articleRepository) Create(article *entity.Article) error {
-
 	return r.db.Create(article).Error
 }
 
-func (r *articleRepository) CreateInTx(tx *gorm.DB, article *entity.Article) error {
-	return tx.Create(article).Error
+func (r *articleRepository) CreateWithCascade(article *entity.Article) error {
+	tx := r.db.Begin()
+	defer func() {
+		if rec := recover(); rec != nil {
+			tx.Rollback()
+		}
+	}()
+
+	if err := tx.Create(article).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if article.CategoryID != nil {
+		cat, err := r.categoryRepo.FindByID(*article.CategoryID)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+		if cat != nil {
+			if err := tx.Model(&entity.Category{}).Where("id = ?", *article.CategoryID).Update("post_count", cat.PostCount+1).Error; err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
+	}
+
+	for _, tag := range article.Tags {
+		t, err := r.tagRepo.FindTagByID(tag.ID)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+		if t != nil {
+			if err := tx.Model(&entity.Tag{}).Where("id = ?", tag.ID).Update("post_count", t.PostCount+1).Error; err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
+	}
+
+	return tx.Commit().Error
 }
 
 func (r *articleRepository) Update(article *entity.Article) error {
-
 	return r.db.Session(&gorm.Session{FullSaveAssociations: true}).Save(article).Error
+}
+
+func (r *articleRepository) UpdateWithCascade(article *entity.Article, oldCategoryID *uint, oldTags []*entity.Tag) error {
+	tx := r.db.Begin()
+	defer func() {
+		if rec := recover(); rec != nil {
+			tx.Rollback()
+		}
+	}()
+
+	if err := tx.Session(&gorm.Session{FullSaveAssociations: true}).Save(article).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if oldCategoryID != nil && article.CategoryID != nil && *oldCategoryID != *article.CategoryID {
+		if oldCat, err := r.categoryRepo.FindByID(*oldCategoryID); err == nil && oldCat != nil && oldCat.PostCount > 0 {
+			if err := tx.Model(&entity.Category{}).Where("id = ?", *oldCategoryID).Update("post_count", oldCat.PostCount-1).Error; err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
+		if newCat, err := r.categoryRepo.FindByID(*article.CategoryID); err == nil && newCat != nil {
+			if err := tx.Model(&entity.Category{}).Where("id = ?", *article.CategoryID).Update("post_count", newCat.PostCount+1).Error; err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
+	} else if oldCategoryID == nil && article.CategoryID != nil {
+		if newCat, err := r.categoryRepo.FindByID(*article.CategoryID); err == nil && newCat != nil {
+			if err := tx.Model(&entity.Category{}).Where("id = ?", *article.CategoryID).Update("post_count", newCat.PostCount+1).Error; err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
+	} else if oldCategoryID != nil && article.CategoryID == nil {
+		if oldCat, err := r.categoryRepo.FindByID(*oldCategoryID); err == nil && oldCat != nil && oldCat.PostCount > 0 {
+			if err := tx.Model(&entity.Category{}).Where("id = ?", *oldCategoryID).Update("post_count", oldCat.PostCount-1).Error; err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
+	}
+
+	oldTagMap := make(map[uint]bool)
+	for _, t := range oldTags {
+		oldTagMap[t.ID] = true
+	}
+	newTagMap := make(map[uint]bool)
+	for _, t := range article.Tags {
+		newTagMap[t.ID] = true
+	}
+
+	for _, t := range oldTags {
+		if !newTagMap[t.ID] {
+			if tag, err := r.tagRepo.FindTagByID(t.ID); err == nil && tag != nil && tag.PostCount > 0 {
+				if err := tx.Model(&entity.Tag{}).Where("id = ?", t.ID).Update("post_count", tag.PostCount-1).Error; err != nil {
+					tx.Rollback()
+					return err
+				}
+			}
+		}
+	}
+
+	for _, t := range article.Tags {
+		if !oldTagMap[t.ID] {
+			if tag, err := r.tagRepo.FindTagByID(t.ID); err == nil && tag != nil {
+				if err := tx.Model(&entity.Tag{}).Where("id = ?", t.ID).Update("post_count", tag.PostCount+1).Error; err != nil {
+					tx.Rollback()
+					return err
+				}
+			}
+		}
+	}
+
+	return tx.Commit().Error
 }
 
 func (r *articleRepository) Delete(id uint) error {
 	return r.db.Select("Tags").Unscoped().Delete(&entity.Article{}, id).Error
 }
 
-func (r *articleRepository) DeleteInTx(tx *gorm.DB, id uint) error {
-	return tx.Select("Tags").Unscoped().Delete(&entity.Article{}, id).Error
+func (r *articleRepository) DeleteWithCascade(id uint) error {
+	tx := r.db.Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	article, err := r.FindArticleByID(id)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	if article == nil {
+		tx.Rollback()
+		return nil
+	}
+
+	if err := tx.Select("Tags").Unscoped().Delete(&entity.Article{}, id).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if article.CategoryID != nil {
+		cat, err := r.categoryRepo.FindByID(*article.CategoryID)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+		if cat != nil && cat.PostCount > 0 {
+			if err := tx.Model(&entity.Category{}).Where("id = ?", *article.CategoryID).Update("post_count", cat.PostCount-1).Error; err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
+	}
+
+	for _, tag := range article.Tags {
+		t, err := r.tagRepo.FindTagByID(tag.ID)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+		if t != nil && t.PostCount > 0 {
+			if err := tx.Model(&entity.Tag{}).Where("id = ?", tag.ID).Update("post_count", t.PostCount-1).Error; err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
+	}
+
+	return tx.Commit().Error
 }
 
 func (r *articleRepository) ListTimeline() ([]*entity.Article, error) {
@@ -129,24 +297,12 @@ func (r *articleRepository) UpdateViewCount(id uint, count uint) error {
 	return r.db.Model(&entity.Article{}).Where("id = ?", id).Update("view_count", count).Error
 }
 
-func (r *articleRepository) UpdateViewCountInTx(tx *gorm.DB, id uint, count uint) error {
-	return tx.Model(&entity.Article{}).Where("id = ?", id).Update("view_count", count).Error
-}
-
 func (r *articleRepository) UpdateCommentCount(id uint, count int) error {
 	return r.db.Model(&entity.Article{}).Where("id = ?", id).Update("comment_count", count).Error
 }
 
-func (r *articleRepository) UpdateCommentCountInTx(tx *gorm.DB, id uint, count int) error {
-	return tx.Model(&entity.Article{}).Where("id = ?", id).Update("comment_count", count).Error
-}
-
 func (r *articleRepository) UpdateLikeCount(id uint, count int) error {
 	return r.db.Model(&entity.Article{}).Where("id = ?", id).Update("like_count", count).Error
-}
-
-func (r *articleRepository) UpdateLikeCountInTx(tx *gorm.DB, id uint, count int) error {
-	return tx.Model(&entity.Article{}).Where("id = ?", id).Update("like_count", count).Error
 }
 
 func (r *articleRepository) ListAll() ([]*entity.Article, error) {

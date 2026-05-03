@@ -7,25 +7,20 @@ import (
 	"blog/internal/repository"
 	bizerrors "blog/pkg/errors"
 	"blog/pkg/utils"
-
-	"gorm.io/gorm"
 )
 
 type commentService struct {
 	commentRepo repository.CommentRepository
 	articleRepo repository.ArticleRepository
-	db          *gorm.DB
 }
 
 func NewCommentService(
 	commentRepo repository.CommentRepository,
 	articleRepo repository.ArticleRepository,
-	db *gorm.DB,
 ) CommentService {
 	return &commentService{
 		commentRepo: commentRepo,
 		articleRepo: articleRepo,
-		db:          db,
 	}
 }
 
@@ -61,15 +56,7 @@ func (s *commentService) Create(userID uint, articleID uint, req *request.Create
 		}
 	}
 
-	err = s.db.Transaction(func(tx *gorm.DB) error {
-		if err := s.commentRepo.CreateInTx(tx, comment); err != nil {
-			return err
-		}
-		if err := s.articleRepo.UpdateCommentCountInTx(tx, articleID, article.CommentCount+1); err != nil {
-			return err
-		}
-		return nil
-	})
+	err = s.commentRepo.CreateWithArticleCount(comment, articleID)
 
 	if err != nil {
 		return nil, err
@@ -129,7 +116,7 @@ func (s *commentService) ListAllAdmin(req *request.AdminCommentListRequest) (*re
 	return response.NewPageResponse(result, total, page, size), nil
 }
 
-func (s *commentService) Update(userID uint, role string, commentID uint, req *request.UpdateCommentRequest) error {
+func (s *commentService) Update(userID uint, commentID uint, req *request.UpdateCommentRequest) error {
 	comment, err := s.commentRepo.FindByID(commentID)
 	if err != nil {
 		return err
@@ -211,27 +198,5 @@ func (s *commentService) AdminDelete(commentID uint) error {
 }
 
 func (s *commentService) deleteCommentWithTransaction(comment *entity.Comment) error {
-	return s.db.Transaction(func(tx *gorm.DB) error {
-		if err := s.commentRepo.DeleteInTx(tx, comment.ID); err != nil {
-			return err
-		}
-
-		if comment.ArticleID > 0 {
-			return s.decrementArticleCommentCount(tx, comment.ArticleID)
-		}
-		return nil
-	})
-}
-
-func (s *commentService) decrementArticleCommentCount(tx *gorm.DB, articleID uint) error {
-	var article entity.Article
-	if err := tx.Select("comment_count").First(&article, articleID).Error; err != nil {
-		return err
-	}
-
-	newCount := int(article.CommentCount) - 1
-	if newCount < 0 {
-		newCount = 0
-	}
-	return s.articleRepo.UpdateCommentCountInTx(tx, articleID, newCount)
+	return s.commentRepo.DeleteWithArticleCount(comment.ID, comment.ArticleID)
 }

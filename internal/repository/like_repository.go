@@ -71,3 +71,52 @@ func (r *likeRepository) ListArticlesByUser(userID uint, offset int, limit int) 
 
 	return articles, total, nil
 }
+
+func (r *likeRepository) CreateLikeAndUpdateCount(userID uint, articleID uint) error {
+	tx := r.db.Begin()
+	defer func() {
+		if rec := recover(); rec != nil {
+			tx.Rollback()
+		}
+	}()
+
+	like := &entity.Like{
+		UserID:     userID,
+		TargetID:   articleID,
+		TargetType: "article",
+	}
+	if err := tx.Create(like).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Model(&entity.Article{}).Where("id = ?", articleID).Update("like_count", gorm.Expr("like_count + 1")).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
+}
+
+func (r *likeRepository) DeleteLikeAndUpdateCount(userID uint, articleID uint) error {
+	tx := r.db.Begin()
+	defer func() {
+		if rec := recover(); rec != nil {
+			tx.Rollback()
+		}
+	}()
+
+	if err := tx.Model(&entity.Like{}).
+		Where("user_id = ? AND target_id = ? AND target_type = ?", userID, articleID, "article").
+		Delete(&entity.Like{}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	if err := tx.Model(&entity.Article{}).Where("id = ?", articleID).Update("like_count", gorm.Expr("like_count - 1")).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	return tx.Commit().Error
+}

@@ -7,38 +7,30 @@ import (
 	"blog/internal/repository"
 	bizerrors "blog/pkg/errors"
 	"blog/pkg/utils"
-
-	"gorm.io/gorm"
 )
 
-// likeService 点赞服务实现
 type likeService struct {
 	likeRepo    repository.LikeRepository
 	articleRepo repository.ArticleRepository
-	db          *gorm.DB
 }
 
-// NewLikeService 创建点赞服务实例
 func NewLikeService(
 	likeRepo repository.LikeRepository,
 	articleRepo repository.ArticleRepository,
-	db *gorm.DB,
 ) LikeService {
 	return &likeService{
 		likeRepo:    likeRepo,
 		articleRepo: articleRepo,
-		db:          db,
 	}
 }
 
 // LikeArticle 点赞文章
 func (s *likeService) LikeArticle(userID uint, articleID uint) (*response.LikeResponse, error) {
-	article, err := s.validateArticleExists(articleID)
+	_, err := s.validateArticleExists(articleID)
 	if err != nil {
 		return nil, err
 	}
 
-	// 检查是否已点赞
 	existingLike, err := s.likeRepo.FindByUserAndTarget(userID, articleID, "article")
 	if err != nil {
 		return nil, err
@@ -47,8 +39,7 @@ func (s *likeService) LikeArticle(userID uint, articleID uint) (*response.LikeRe
 		return nil, bizerrors.New(bizerrors.CodeResourceAlreadyExists, "已点赞")
 	}
 
-	// 创建点赞记录并更新文章点赞数
-	err = s.createLikeAndUpdateCount(userID, articleID, article)
+	err = s.likeRepo.CreateLikeAndUpdateCount(userID, articleID)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +54,6 @@ func (s *likeService) UnlikeArticle(userID uint, articleID uint) (*response.Like
 		return nil, err
 	}
 
-	// 检查点赞记录是否存在
 	existingLike, err := s.likeRepo.FindByUserAndTarget(userID, articleID, "article")
 	if err != nil {
 		return nil, err
@@ -72,8 +62,7 @@ func (s *likeService) UnlikeArticle(userID uint, articleID uint) (*response.Like
 		return nil, bizerrors.New(bizerrors.CodeResourceNotFound, "点赞记录不存在")
 	}
 
-	// 删除点赞记录并更新文章点赞数
-	err = s.deleteLikeAndUpdateCount(userID, articleID)
+	err = s.likeRepo.DeleteLikeAndUpdateCount(userID, articleID)
 	if err != nil {
 		return nil, err
 	}
@@ -132,43 +121,6 @@ func (s *likeService) validateArticleExists(articleID uint) (*entity.Article, er
 		return nil, bizerrors.New(bizerrors.CodeResourceNotFound, "文章不存在")
 	}
 	return article, nil
-}
-
-// createLikeAndUpdateCount 创建点赞记录并更新文章点赞数（事务操作）
-func (s *likeService) createLikeAndUpdateCount(userID uint, articleID uint, article *entity.Article) error {
-	return s.db.Transaction(func(tx *gorm.DB) error {
-		like := &entity.Like{
-			UserID:     userID,
-			TargetID:   articleID,
-			TargetType: "article",
-		}
-		if err := s.likeRepo.Create(like); err != nil {
-			return err
-		}
-
-		newCount := article.LikeCount + 1
-		return s.articleRepo.UpdateLikeCountInTx(tx, articleID, newCount)
-	})
-}
-
-// deleteLikeAndUpdateCount 删除点赞记录并更新文章点赞数（事务操作）
-func (s *likeService) deleteLikeAndUpdateCount(userID uint, articleID uint) error {
-	return s.db.Transaction(func(tx *gorm.DB) error {
-		if err := s.likeRepo.Delete(userID, articleID, "article"); err != nil {
-			return err
-		}
-
-		article, err := s.articleRepo.FindArticleByID(articleID)
-		if err != nil {
-			return err
-		}
-
-		newCount := article.LikeCount - 1
-		if newCount < 0 {
-			newCount = 0
-		}
-		return s.articleRepo.UpdateLikeCountInTx(tx, articleID, newCount)
-	})
 }
 
 // buildLikeResponse 构建点赞响应数据

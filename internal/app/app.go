@@ -134,9 +134,9 @@ func (a *App) initDatabase() error {
 func (a *App) initDependencies() {
 	// 创建 Repository
 	userRepo := repository.NewUserRepository(a.mysqlDB)
-	articleRepo := repository.NewArticleRepository(a.mysqlDB, a.redis)
 	categoryRepo := repository.NewCategoryRepository(a.mysqlDB)
 	tagRepo := repository.NewTagRepository(a.mysqlDB)
+	articleRepo := repository.NewArticleRepository(a.mysqlDB, a.redis, categoryRepo, tagRepo)
 	commentRepo := repository.NewCommentRepository(a.mysqlDB)
 	likeRepo := repository.NewLikeRepository(a.mysqlDB)
 	viewCountRepo := repository.NewViewCountRepository(a.redis)
@@ -144,13 +144,13 @@ func (a *App) initDependencies() {
 	// 创建 Service
 	userSvc := service.NewUserService(userRepo)
 	authSvc := service.NewAuthService(userRepo, userSvc)
-	articleSvc := service.NewArticleService(articleRepo, tagRepo, categoryRepo, a.mysqlDB)
+	articleSvc := service.NewArticleService(articleRepo, tagRepo, categoryRepo)
 	categorySvc := service.NewCategoryService(categoryRepo)
 	tagService := service.NewTagService(tagRepo)
 	viewCountSvc := service.NewViewCountService(articleRepo, viewCountRepo)
-	commentSvc := service.NewCommentService(commentRepo, articleRepo, a.mysqlDB)
+	commentSvc := service.NewCommentService(commentRepo, articleRepo)
 	uploadCleanSvc := service.NewUploadCleanService(articleRepo, userRepo, a.cfg.Upload.BasePath)
-	likeSvc := service.NewLikeService(likeRepo, articleRepo, a.mysqlDB)
+	likeSvc := service.NewLikeService(likeRepo, articleRepo)
 
 	// 创建停止通道，用于优雅关闭定时任务
 	a.viewCountStopCh = make(chan struct{})

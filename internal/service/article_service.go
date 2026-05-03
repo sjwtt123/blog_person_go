@@ -9,28 +9,23 @@ import (
 	"blog/pkg/utils"
 	"strings"
 	"time"
-
-	"gorm.io/gorm"
 )
 
 type articleService struct {
 	articleRepo  repository.ArticleRepository
 	tagRepo      repository.TagRepository
 	categoryRepo repository.CategoryRepository
-	db           *gorm.DB
 }
 
 func NewArticleService(
 	articleRepo repository.ArticleRepository,
 	tagRepo repository.TagRepository,
 	categoryRepo repository.CategoryRepository,
-	db *gorm.DB,
 ) ArticleService {
 	return &articleService{
 		articleRepo:  articleRepo,
 		tagRepo:      tagRepo,
 		categoryRepo: categoryRepo,
-		db:           db,
 	}
 }
 
@@ -106,7 +101,7 @@ func (s *articleService) Create(authorID uint, req *request.ArticleUpsertRequest
 	}
 
 	a := s.buildArticle(authorID, req, categoryID, status, publishedAt, slug, tags)
-	return s.createWithTransaction(a, categoryID)
+	return s.articleRepo.CreateWithCascade(a)
 }
 
 func (s *articleService) validateCategory(categoryID *uint) (*uint, error) {
@@ -155,49 +150,6 @@ func (s *articleService) buildArticle(authorID uint, req *request.ArticleUpsertR
 	}
 }
 
-func (s *articleService) createWithTransaction(a *entity.Article, categoryID *uint) error {
-	return s.db.Transaction(func(tx *gorm.DB) error {
-		if err := s.articleRepo.CreateInTx(tx, a); err != nil {
-			return err
-		}
-
-		if categoryID != nil {
-			if err := s.incrementCategoryCount(tx, *categoryID); err != nil {
-				return err
-			}
-		}
-
-		for _, tag := range a.Tags {
-			if err := s.incrementTagCount(tx, tag.ID); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-}
-
-func (s *articleService) incrementCategoryCount(tx *gorm.DB, categoryID uint) error {
-	cat, err := s.categoryRepo.FindByID(categoryID)
-	if err != nil {
-		return err
-	}
-	if cat == nil {
-		return nil
-	}
-	return s.categoryRepo.UpdatePostCountInTx(tx, categoryID, cat.PostCount+1)
-}
-
-func (s *articleService) incrementTagCount(tx *gorm.DB, tagID uint) error {
-	tag, err := s.tagRepo.FindTagByID(tagID)
-	if err != nil {
-		return err
-	}
-	if tag == nil {
-		return nil
-	}
-	return s.tagRepo.UpdatePostCountInTx(tx, tagID, tag.PostCount+1)
-}
-
 func (s *articleService) Update(id uint, req *request.ArticleUpsertRequest) error {
 	a, err := s.articleRepo.FindArticleByID(id)
 	if err != nil {
@@ -221,8 +173,11 @@ func (s *articleService) Update(id uint, req *request.ArticleUpsertRequest) erro
 		return err
 	}
 
+	oldCategoryID := a.CategoryID
+	oldTags := a.Tags
+
 	s.updateArticleFields(a, req, categoryID, status, slug, tags)
-	return s.updateWithTransaction(a, categoryID)
+	return s.articleRepo.UpdateWithCascade(a, oldCategoryID, oldTags)
 }
 
 func (s *articleService) updatePublishedAt(a *entity.Article, status int) {
@@ -247,102 +202,6 @@ func (s *articleService) updateArticleFields(a *entity.Article, req *request.Art
 	a.CategoryID = categoryID
 }
 
-func (s *articleService) updateWithTransaction(a *entity.Article, categoryID *uint) error {
-	oldArticle, err := s.articleRepo.FindArticleByID(a.ID)
-	if err != nil {
-		return err
-	}
-	oldCategoryID := oldArticle.CategoryID
-	oldTags := oldArticle.Tags
-
-	return s.db.Transaction(func(tx *gorm.DB) error {
-		if err := s.articleRepo.Update(a); err != nil {
-			return err
-		}
-
-		if err := s.adjustCategoryCounts(tx, oldCategoryID, categoryID); err != nil {
-			return err
-		}
-
-		return s.adjustTagCounts(tx, oldTags, a.Tags)
-	})
-}
-
-func (s *articleService) adjustCategoryCounts(tx *gorm.DB, oldCategoryID, newCategoryID *uint) error {
-	// 如果分类未改变，无需调整
-	if oldCategoryID != nil && newCategoryID != nil && *oldCategoryID == *newCategoryID {
-		return nil
-	}
-
-	// 减少旧分类计数
-	if oldCategoryID != nil {
-		if err := s.decrementCategoryCount(tx, *oldCategoryID); err != nil {
-			return err
-		}
-	}
-
-	// 增加新分类计数
-	if newCategoryID != nil {
-		if err := s.incrementCategoryCount(tx, *newCategoryID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (s *articleService) adjustTagCounts(tx *gorm.DB, oldTags, newTags []*entity.Tag) error {
-	oldTagMap := make(map[uint]bool)
-	for _, t := range oldTags {
-		oldTagMap[t.ID] = true
-	}
-
-	newTagMap := make(map[uint]bool)
-	for _, t := range newTags {
-		newTagMap[t.ID] = true
-	}
-
-	// 减少被移除的标签计数
-	for _, t := range oldTags {
-		if !newTagMap[t.ID] {
-			if err := s.decrementTagCount(tx, t.ID); err != nil {
-				return err
-			}
-		}
-	}
-
-	// 增加新添加的标签计数
-	for _, t := range newTags {
-		if !oldTagMap[t.ID] {
-			if err := s.incrementTagCount(tx, t.ID); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func (s *articleService) decrementCategoryCount(tx *gorm.DB, categoryID uint) error {
-	cat, err := s.categoryRepo.FindByID(categoryID)
-	if err != nil {
-		return err
-	}
-	if cat != nil && cat.PostCount > 0 {
-		return s.categoryRepo.UpdatePostCountInTx(tx, categoryID, cat.PostCount-1)
-	}
-	return nil
-}
-
-func (s *articleService) decrementTagCount(tx *gorm.DB, tagID uint) error {
-	tag, err := s.tagRepo.FindTagByID(tagID)
-	if err != nil {
-		return err
-	}
-	if tag != nil && tag.PostCount > 0 {
-		return s.tagRepo.UpdatePostCountInTx(tx, tagID, tag.PostCount-1)
-	}
-	return nil
-}
-
 func (s *articleService) Delete(id uint) error {
 	a, err := s.articleRepo.FindByID(id)
 	if err != nil {
@@ -352,30 +211,7 @@ func (s *articleService) Delete(id uint) error {
 		return bizerrors.New(bizerrors.CodeResourceNotFound, "文章不存在")
 	}
 
-	return s.db.Transaction(func(tx *gorm.DB) error {
-		if err := s.articleRepo.DeleteInTx(tx, id); err != nil {
-			return err
-		}
-
-		if a.CategoryID != nil {
-			cat, err := s.categoryRepo.FindByID(*a.CategoryID)
-			if err != nil {
-				return err
-			}
-			if cat != nil && cat.PostCount > 0 {
-				if err := s.categoryRepo.UpdatePostCountInTx(tx, *a.CategoryID, cat.PostCount-1); err != nil {
-					return err
-				}
-			}
-		}
-
-		for _, tag := range a.Tags {
-			if err := s.decrementTagCount(tx, tag.ID); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	return s.articleRepo.DeleteWithCascade(id)
 }
 
 func (s *articleService) ensureTags(names []string) ([]*entity.Tag, error) {
