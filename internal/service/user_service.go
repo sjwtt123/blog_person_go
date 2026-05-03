@@ -25,6 +25,11 @@ func NewUserService(userRepo repository.UserRepository) UserService {
 
 // Register 用户注册
 func (s *userService) Register(req *request.RegisterRequest) (*response.UserResponse, error) {
+	// 验证两次密码是否一致
+	if req.Password != req.ConfirmPassword {
+		return nil, bizerrors.New(bizerrors.CodeInvalidParam, "两次输入的密码不一致")
+	}
+
 	// 检查用户名是否存在
 	err := s.IsExistsUsername(req.Username)
 	if err != nil {

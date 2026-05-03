@@ -29,6 +29,11 @@ func (ctrl *Controller) Register(c *gin.Context) {
 		return
 	}
 
+	if err := ctrl.authService.VerifyEmailCode(req.Email, req.Code); err != nil {
+		response.BizError(c, err)
+		return
+	}
+
 	userResp, err := ctrl.userService.Register(&req)
 	if err != nil {
 		response.BizError(c, err)
@@ -36,6 +41,38 @@ func (ctrl *Controller) Register(c *gin.Context) {
 	}
 
 	response.SuccessWithMessage(c, "注册成功", userResp)
+}
+
+// SendCode 发送邮箱验证码
+func (ctrl *Controller) SendCode(c *gin.Context) {
+	var req request.SendCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	if err := ctrl.authService.SendEmailCode(req.Email); err != nil {
+		response.BizError(c, err)
+		return
+	}
+
+	response.SuccessWithMessage(c, "验证码已发送", nil)
+}
+
+// ResetPassword 重置密码
+func (ctrl *Controller) ResetPassword(c *gin.Context) {
+	var req request.ResetPasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+
+	if err := ctrl.authService.ResetPassword(&req); err != nil {
+		response.BizError(c, err)
+		return
+	}
+
+	response.SuccessWithMessage(c, "密码重置成功", nil)
 }
 
 // Login 用户登录

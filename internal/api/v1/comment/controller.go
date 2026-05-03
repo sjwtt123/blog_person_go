@@ -79,8 +79,7 @@ func (ctrl *Controller) Update(c *gin.Context) {
 	}
 
 	userID := middleware.GetUserID(c)
-	role := middleware.GetRole(c)
-	if err := ctrl.commentService.Update(userID, role, uint(commentID), &req); err != nil {
+	if err := ctrl.commentService.Update(userID, uint(commentID), &req); err != nil {
 		response.BizError(c, err)
 		return
 	}

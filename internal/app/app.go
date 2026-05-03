@@ -134,6 +134,7 @@ func (a *App) initDatabase() error {
 func (a *App) initDependencies() {
 	// 创建 Repository
 	userRepo := repository.NewUserRepository(a.mysqlDB)
+	authRepo := repository.NewAuthRepository(a.redis)
 	categoryRepo := repository.NewCategoryRepository(a.mysqlDB)
 	tagRepo := repository.NewTagRepository(a.mysqlDB)
 	articleRepo := repository.NewArticleRepository(a.mysqlDB, a.redis, categoryRepo, tagRepo)
@@ -143,7 +144,7 @@ func (a *App) initDependencies() {
 
 	// 创建 Service
 	userSvc := service.NewUserService(userRepo)
-	authSvc := service.NewAuthService(userRepo, userSvc)
+	authSvc := service.NewAuthService(userRepo, authRepo, userSvc, a.cfg.Email)
 	articleSvc := service.NewArticleService(articleRepo, tagRepo, categoryRepo)
 	categorySvc := service.NewCategoryService(categoryRepo)
 	tagService := service.NewTagService(tagRepo)

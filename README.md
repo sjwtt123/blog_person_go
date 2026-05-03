@@ -401,13 +401,14 @@ make help         # 显示帮助
 #### 3. 错误处理规范
 - **统一使用** `pkg/errors` 包中的 `BizError` 定义业务错误
 - **禁止使用** `panic` 或 `log.Fatal` 处理业务错误
-- **Controller 层**统一使用 `response.HandleError(c, err)` 处理错误响应
+- **Controller 层**统一使用 `response.BizError(c, err)` 处理错误响应
 - **Service 层**返回 `*errors.BizError` 类型，便于 Controller 识别
 
 #### 4. 事务处理规范
-- 事务在 **Service 层**的一个方法内完成
+- 事务在 **Repository 层**（数据层）的一个方法内完成
 - 使用 `db.Transaction(func(tx *gorm.DB) error { ... })` 闭包保证原子性
 - 相关数据库操作通过 `tx` 传递，确保在同一事务中
+- **Service 层**仅调用 Repository 的事务方法，不直接管理事务
 
 #### 5. 数据库操作规范
 - **GORM 查询链**不超过 3 层调用

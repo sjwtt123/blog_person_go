@@ -11,5 +11,7 @@ func (ctrl *Controller) RegisterRoutes(r *gin.RouterGroup) {
 		authGroup.POST("/register", ctrl.Register)
 		authGroup.POST("/login", ctrl.Login)
 		authGroup.POST("/refresh", ctrl.RefreshToken)
+		authGroup.POST("/send-code", ctrl.SendCode)
+		authGroup.POST("/reset-password", ctrl.ResetPassword)
 	}
 }

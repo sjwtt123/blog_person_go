@@ -13,6 +13,7 @@ const (
 	CodeMethodNotAllowed = 405
 	CodeRequestTimeout   = 408
 	CodeConflict         = 409
+	CodeTooManyRequests  = 429
 
 	// 服务器错误 5xx
 	CodeInternalError      = 500

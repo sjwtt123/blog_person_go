@@ -51,3 +51,16 @@ cors:
     - "Origin"
     - "Content-Type"
     - "Authorization"
+
+# 上传配置
+upload:
+  base_path: "uploads"  # 上传目录（相对于工作目录）
+  max_size: 5242880     # 5MB
+
+# 邮件配置
+email:
+  host: "smtp.qq.com"           # SMTP 服务器地址
+  port: 465                     # SMTP 服务器端口（SSL）
+  username: "your-email@qq.com" # 发件人邮箱
+  password: "your-authorization-code" # 授权码（非QQ密码）
+  from: "Blog"                  # 发件人显示名称

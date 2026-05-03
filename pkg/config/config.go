@@ -10,6 +10,7 @@ type Config struct {
 	Log      LogConfig      `mapstructure:"log"`
 	CORS     CORSConfig     `mapstructure:"cors"`
 	Upload   UploadConfig   `mapstructure:"upload"`
+	Email    EmailConfig    `mapstructure:"email"`
 }
 
 // AppConfig 应用配置
@@ -77,4 +78,13 @@ type CORSConfig struct {
 type UploadConfig struct {
 	BasePath string `mapstructure:"base_path"` // 上传目录（既是物理路径也是 URL 前缀）
 	MaxSize  int64  `mapstructure:"max_size"`  // 最大文件大小(字节)
+}
+
+// EmailConfig 邮件配置
+type EmailConfig struct {
+	Host     string `mapstructure:"host"`     // SMTP 服务器地址
+	Port     int    `mapstructure:"port"`     // SMTP 服务器端口
+	Username string `mapstructure:"username"` // 发件人邮箱
+	Password string `mapstructure:"password"` // 授权码
+	From     string `mapstructure:"from"`     // 发件人显示名称
 }
