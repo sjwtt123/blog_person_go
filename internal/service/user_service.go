@@ -205,19 +205,19 @@ func (s *userService) AdminUpdateUser(id uint, req *request.AdminUserUpdateReque
 }
 
 func (s *userService) validateAndUpdateBasicInfo(user *entity.User, req *request.AdminUserUpdateRequest) error {
-	if user.Username != req.Username {
+	if req.Username != "" && user.Username != req.Username {
 		if err := s.IsExistsUsername(req.Username); err != nil {
 			return err
 		}
+		user.Username = req.Username
 	}
-	user.Username = req.Username
 
-	if user.Email != req.Email {
+	if req.Email != "" && user.Email != req.Email {
 		if err := s.IsExistsEmail(req.Email); err != nil {
 			return err
 		}
+		user.Email = req.Email
 	}
-	user.Email = req.Email
 	return nil
 }
 
