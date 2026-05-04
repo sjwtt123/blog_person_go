@@ -3,6 +3,7 @@ package utils
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"regexp"
 	"strings"
 )
 
@@ -25,12 +26,17 @@ func Contains(slice []string, item string) bool {
 	return false
 }
 
-// TrimSpace 去除首尾空格
-func TrimSpace(s string) string {
-	return strings.TrimSpace(s)
-}
+var (
+	nonSlugChar = regexp.MustCompile(`[^a-z0-9\-]+`)
+	multiDash   = regexp.MustCompile(`-+`)
+)
 
-// IsEmpty 检查字符串是否为空
-func IsEmpty(s string) bool {
-	return TrimSpace(s) == ""
+// Slugify 将字符串转换为 slug 格式
+func Slugify(s string) string {
+	v := strings.ToLower(strings.TrimSpace(s))
+	v = strings.ReplaceAll(v, " ", "-")
+	v = nonSlugChar.ReplaceAllString(v, "-")
+	v = multiDash.ReplaceAllString(v, "-")
+	v = strings.Trim(v, "-")
+	return v
 }

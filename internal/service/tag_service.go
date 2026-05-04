@@ -6,6 +6,7 @@ import (
 	"blog/internal/model/entity"
 	"blog/internal/repository"
 	bizerrors "blog/pkg/errors"
+	"blog/pkg/utils"
 )
 
 type tagService struct {
@@ -45,7 +46,7 @@ func (s *tagService) Create(req *request.TagUpsertRequest) error {
 
 	slug := req.Slug
 	if slug == "" {
-		slug = slugify(req.Name)
+		slug = utils.Slugify(req.Name)
 	}
 
 	if slug != "" {
@@ -86,7 +87,7 @@ func (s *tagService) Update(id uint, req *request.TagUpsertRequest) error {
 
 	slug := req.Slug
 	if slug == "" {
-		slug = slugify(req.Name)
+		slug = utils.Slugify(req.Name)
 	}
 	if slug != "" && slug != tag.Slug {
 		bySlug, err := s.repo.FindBySlug(slug)

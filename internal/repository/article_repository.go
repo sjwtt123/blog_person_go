@@ -99,186 +99,200 @@ func (r *articleRepository) Create(article *entity.Article) error {
 	return r.db.Create(article).Error
 }
 
+// CreateWithCascade 级联创建文章，同时更新分类和标签的文章计数
 func (r *articleRepository) CreateWithCascade(article *entity.Article) error {
-	tx := r.db.Begin()
-	defer func() {
-		if rec := recover(); rec != nil {
-			tx.Rollback()
-		}
-	}()
-
-	if err := tx.Create(article).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if article.CategoryID != nil {
-		cat, err := r.categoryRepo.FindByID(*article.CategoryID)
-		if err != nil {
-			tx.Rollback()
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		// 创建文章
+		if err := tx.Create(article).Error; err != nil {
 			return err
 		}
-		if cat != nil {
-			if err := tx.Model(&entity.Category{}).Where("id = ?", *article.CategoryID).Update("post_count", cat.PostCount+1).Error; err != nil {
-				tx.Rollback()
+
+		// 更新分类文章计数
+		if article.CategoryID != nil {
+			if err := r.incrementCategoryPostCount(tx, *article.CategoryID); err != nil {
 				return err
 			}
 		}
-	}
 
-	for _, tag := range article.Tags {
-		t, err := r.tagRepo.FindTagByID(tag.ID)
-		if err != nil {
-			tx.Rollback()
-			return err
-		}
-		if t != nil {
-			if err := tx.Model(&entity.Tag{}).Where("id = ?", tag.ID).Update("post_count", t.PostCount+1).Error; err != nil {
-				tx.Rollback()
+		// 更新标签文章计数
+		for _, tag := range article.Tags {
+			if err := r.incrementTagPostCount(tx, tag.ID); err != nil {
 				return err
 			}
 		}
-	}
 
-	return tx.Commit().Error
+		return nil
+	})
 }
 
 func (r *articleRepository) Update(article *entity.Article) error {
 	return r.db.Session(&gorm.Session{FullSaveAssociations: true}).Save(article).Error
 }
 
+// UpdateWithCascade 级联更新文章，处理分类和标签变更时的文章计数
 func (r *articleRepository) UpdateWithCascade(article *entity.Article, oldCategoryID *uint, oldTags []*entity.Tag) error {
-	tx := r.db.Begin()
-	defer func() {
-		if rec := recover(); rec != nil {
-			tx.Rollback()
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		// 保存文章基本信息（不保存关联）
+		if err := tx.Save(article).Error; err != nil {
+			return err
 		}
-	}()
 
-	if err := tx.Session(&gorm.Session{FullSaveAssociations: true}).Save(article).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
+		// 替换标签关联（先删除旧关联，再添加新关联）
+		if err := tx.Model(article).Association("Tags").Replace(article.Tags); err != nil {
+			return err
+		}
 
-	if oldCategoryID != nil && article.CategoryID != nil && *oldCategoryID != *article.CategoryID {
-		if oldCat, err := r.categoryRepo.FindByID(*oldCategoryID); err == nil && oldCat != nil && oldCat.PostCount > 0 {
-			if err := tx.Model(&entity.Category{}).Where("id = ?", *oldCategoryID).Update("post_count", oldCat.PostCount-1).Error; err != nil {
-				tx.Rollback()
-				return err
-			}
+		// 处理分类变更
+		if err := r.handleCategoryChange(tx, oldCategoryID, article.CategoryID); err != nil {
+			return err
 		}
-		if newCat, err := r.categoryRepo.FindByID(*article.CategoryID); err == nil && newCat != nil {
-			if err := tx.Model(&entity.Category{}).Where("id = ?", *article.CategoryID).Update("post_count", newCat.PostCount+1).Error; err != nil {
-				tx.Rollback()
-				return err
-			}
-		}
-	} else if oldCategoryID == nil && article.CategoryID != nil {
-		if newCat, err := r.categoryRepo.FindByID(*article.CategoryID); err == nil && newCat != nil {
-			if err := tx.Model(&entity.Category{}).Where("id = ?", *article.CategoryID).Update("post_count", newCat.PostCount+1).Error; err != nil {
-				tx.Rollback()
-				return err
-			}
-		}
-	} else if oldCategoryID != nil && article.CategoryID == nil {
-		if oldCat, err := r.categoryRepo.FindByID(*oldCategoryID); err == nil && oldCat != nil && oldCat.PostCount > 0 {
-			if err := tx.Model(&entity.Category{}).Where("id = ?", *oldCategoryID).Update("post_count", oldCat.PostCount-1).Error; err != nil {
-				tx.Rollback()
-				return err
-			}
-		}
-	}
 
-	oldTagMap := make(map[uint]bool)
-	for _, t := range oldTags {
-		oldTagMap[t.ID] = true
-	}
-	newTagMap := make(map[uint]bool)
-	for _, t := range article.Tags {
-		newTagMap[t.ID] = true
-	}
-
-	for _, t := range oldTags {
-		if !newTagMap[t.ID] {
-			if tag, err := r.tagRepo.FindTagByID(t.ID); err == nil && tag != nil && tag.PostCount > 0 {
-				if err := tx.Model(&entity.Tag{}).Where("id = ?", t.ID).Update("post_count", tag.PostCount-1).Error; err != nil {
-					tx.Rollback()
-					return err
-				}
-			}
+		// 处理标签变更
+		if err := r.handleTagChange(tx, oldTags, article.Tags); err != nil {
+			return err
 		}
-	}
 
-	for _, t := range article.Tags {
-		if !oldTagMap[t.ID] {
-			if tag, err := r.tagRepo.FindTagByID(t.ID); err == nil && tag != nil {
-				if err := tx.Model(&entity.Tag{}).Where("id = ?", t.ID).Update("post_count", tag.PostCount+1).Error; err != nil {
-					tx.Rollback()
-					return err
-				}
-			}
-		}
-	}
-
-	return tx.Commit().Error
+		return nil
+	})
 }
 
 func (r *articleRepository) Delete(id uint) error {
 	return r.db.Select("Tags").Unscoped().Delete(&entity.Article{}, id).Error
 }
 
+// DeleteWithCascade 级联删除文章，同时更新分类和标签的文章计数
 func (r *articleRepository) DeleteWithCascade(id uint) error {
-	tx := r.db.Begin()
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		// 查询文章详情（用于更新计数）
+		article, err := r.FindArticleByID(id)
+		if err != nil {
+			return err
 		}
-	}()
+		if article == nil {
+			return nil
+		}
 
-	article, err := r.FindArticleByID(id)
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-	if article == nil {
-		tx.Rollback()
+		// 删除文章
+		if err := tx.Select("Tags").Unscoped().Delete(&entity.Article{}, id).Error; err != nil {
+			return err
+		}
+
+		// 更新分类文章计数
+		if article.CategoryID != nil {
+			if err := r.decrementCategoryPostCount(tx, *article.CategoryID); err != nil {
+				return err
+			}
+		}
+
+		// 更新标签文章计数
+		for _, tag := range article.Tags {
+			if err := r.decrementTagPostCount(tx, tag.ID); err != nil {
+				return err
+			}
+		}
+
 		return nil
-	}
+	})
+}
 
-	if err := tx.Select("Tags").Unscoped().Delete(&entity.Article{}, id).Error; err != nil {
-		tx.Rollback()
+// incrementCategoryPostCount 增加分类文章计数
+func (r *articleRepository) incrementCategoryPostCount(tx *gorm.DB, categoryID uint) error {
+	cat, err := r.categoryRepo.FindByID(categoryID)
+	if err != nil {
 		return err
 	}
+	if cat != nil {
+		return tx.Model(&entity.Category{}).Where("id = ?", categoryID).Update("post_count", cat.PostCount+1).Error
+	}
+	return nil
+}
 
-	if article.CategoryID != nil {
-		cat, err := r.categoryRepo.FindByID(*article.CategoryID)
-		if err != nil {
-			tx.Rollback()
+// decrementCategoryPostCount 减少分类文章计数
+func (r *articleRepository) decrementCategoryPostCount(tx *gorm.DB, categoryID uint) error {
+	cat, err := r.categoryRepo.FindByID(categoryID)
+	if err != nil {
+		return err
+	}
+	if cat != nil && cat.PostCount > 0 {
+		return tx.Model(&entity.Category{}).Where("id = ?", categoryID).Update("post_count", cat.PostCount-1).Error
+	}
+	return nil
+}
+
+// incrementTagPostCount 增加标签文章计数
+func (r *articleRepository) incrementTagPostCount(tx *gorm.DB, tagID uint) error {
+	tag, err := r.tagRepo.FindTagByID(tagID)
+	if err != nil {
+		return err
+	}
+	if tag != nil {
+		return tx.Model(&entity.Tag{}).Where("id = ?", tagID).Update("post_count", tag.PostCount+1).Error
+	}
+	return nil
+}
+
+// decrementTagPostCount 减少标签文章计数
+func (r *articleRepository) decrementTagPostCount(tx *gorm.DB, tagID uint) error {
+	tag, err := r.tagRepo.FindTagByID(tagID)
+	if err != nil {
+		return err
+	}
+	if tag != nil && tag.PostCount > 0 {
+		return tx.Model(&entity.Tag{}).Where("id = ?", tagID).Update("post_count", tag.PostCount-1).Error
+	}
+	return nil
+}
+
+// handleCategoryChange 处理分类变更时的文章计数调整
+func (r *articleRepository) handleCategoryChange(tx *gorm.DB, oldCategoryID, newCategoryID *uint) error {
+	// 分类发生变化：旧分类减 1，新分类加 1
+	if oldCategoryID != nil && newCategoryID != nil && *oldCategoryID != *newCategoryID {
+		if err := r.decrementCategoryPostCount(tx, *oldCategoryID); err != nil {
 			return err
 		}
-		if cat != nil && cat.PostCount > 0 {
-			if err := tx.Model(&entity.Category{}).Where("id = ?", *article.CategoryID).Update("post_count", cat.PostCount-1).Error; err != nil {
-				tx.Rollback()
+		return r.incrementCategoryPostCount(tx, *newCategoryID)
+	}
+	// 新增分类
+	if oldCategoryID == nil && newCategoryID != nil {
+		return r.incrementCategoryPostCount(tx, *newCategoryID)
+	}
+	// 移除分类
+	if oldCategoryID != nil && newCategoryID == nil {
+		return r.decrementCategoryPostCount(tx, *oldCategoryID)
+	}
+	return nil
+}
+
+// handleTagChange 处理标签变更时的文章计数调整
+func (r *articleRepository) handleTagChange(tx *gorm.DB, oldTags, newTags []*entity.Tag) error {
+	oldTagMap := make(map[uint]bool)
+	for _, t := range oldTags {
+		oldTagMap[t.ID] = true
+	}
+	newTagMap := make(map[uint]bool)
+	for _, t := range newTags {
+		newTagMap[t.ID] = true
+	}
+
+	// 移除的标签：文章计数减 1
+	for _, t := range oldTags {
+		if !newTagMap[t.ID] {
+			if err := r.decrementTagPostCount(tx, t.ID); err != nil {
 				return err
 			}
 		}
 	}
 
-	for _, tag := range article.Tags {
-		t, err := r.tagRepo.FindTagByID(tag.ID)
-		if err != nil {
-			tx.Rollback()
-			return err
-		}
-		if t != nil && t.PostCount > 0 {
-			if err := tx.Model(&entity.Tag{}).Where("id = ?", tag.ID).Update("post_count", t.PostCount-1).Error; err != nil {
-				tx.Rollback()
+	// 新增的标签：文章计数加 1
+	for _, t := range newTags {
+		if !oldTagMap[t.ID] {
+			if err := r.incrementTagPostCount(tx, t.ID); err != nil {
 				return err
 			}
 		}
 	}
 
-	return tx.Commit().Error
+	return nil
 }
 
 func (r *articleRepository) ListTimeline() ([]*entity.Article, error) {

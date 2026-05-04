@@ -19,25 +19,17 @@ func (r *commentRepository) Create(comment *entity.Comment) error {
 	return r.db.Create(comment).Error
 }
 
+// CreateWithArticleCount 创建评论并增加文章评论数
 func (r *commentRepository) CreateWithArticleCount(comment *entity.Comment, articleID uint) error {
-	tx := r.db.Begin()
-	defer func() {
-		if rec := recover(); rec != nil {
-			tx.Rollback()
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		// 创建评论
+		if err := tx.Create(comment).Error; err != nil {
+			return err
 		}
-	}()
 
-	if err := tx.Create(comment).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if err := tx.Model(&entity.Article{}).Where("id = ?", articleID).Update("comment_count", gorm.Expr("comment_count + 1")).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	return tx.Commit().Error
+		// 增加文章评论数
+		return tx.Model(&entity.Article{}).Where("id = ?", articleID).Update("comment_count", gorm.Expr("comment_count + 1")).Error
+	})
 }
 
 func (r *commentRepository) FindByID(id uint) (*entity.Comment, error) {
@@ -121,25 +113,17 @@ func (r *commentRepository) Delete(id uint) error {
 	return r.db.Delete(&entity.Comment{}, id).Error
 }
 
+// DeleteWithArticleCount 删除评论并减少文章评论数
 func (r *commentRepository) DeleteWithArticleCount(commentID uint, articleID uint) error {
-	tx := r.db.Begin()
-	defer func() {
-		if rec := recover(); rec != nil {
-			tx.Rollback()
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		// 删除评论
+		if err := tx.Delete(&entity.Comment{}, commentID).Error; err != nil {
+			return err
 		}
-	}()
 
-	if err := tx.Delete(&entity.Comment{}, commentID).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	if err := tx.Model(&entity.Article{}).Where("id = ?", articleID).Update("comment_count", gorm.Expr("comment_count - 1")).Error; err != nil {
-		tx.Rollback()
-		return err
-	}
-
-	return tx.Commit().Error
+		// 减少文章评论数
+		return tx.Model(&entity.Article{}).Where("id = ?", articleID).Update("comment_count", gorm.Expr("comment_count - 1")).Error
+	})
 }
 
 func (r *commentRepository) CountByArticleID(articleID uint) (int64, error) {

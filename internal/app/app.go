@@ -151,20 +151,21 @@ func (a *App) initDependencies() {
 	viewCountSvc := service.NewViewCountService(articleRepo, viewCountRepo)
 	commentSvc := service.NewCommentService(commentRepo, articleRepo)
 	uploadCleanSvc := service.NewUploadCleanService(articleRepo, userRepo, a.cfg.Upload.BasePath)
+	uploadSvc := service.NewUploadService(a.cfg.Upload.BasePath)
 	likeSvc := service.NewLikeService(likeRepo, articleRepo)
 
 	// 创建停止通道，用于优雅关闭定时任务
 	a.viewCountStopCh = make(chan struct{})
 	a.uploadCleanStopCh = make(chan struct{})
 
-	// 启动定时同步（每 5 分钟同步一次 Redis 到 MySQL）
+	// 启动定时同步（每 5 分钟同步一次浏览量 Redis 到 MySQL）
 	go viewCountSvc.StartScheduledSync(a.viewCountStopCh)
 
 	// 启动定时清理（每 24 小时清理一次未使用图片）
 	go uploadCleanSvc.StartScheduledClean(a.uploadCleanStopCh)
 
 	// 创建 Router
-	a.router = api.NewRouter(userSvc, authSvc, articleSvc, categorySvc, tagService, viewCountSvc, commentSvc, likeSvc, uploadCleanSvc, a.cfg.Upload.BasePath)
+	a.router = api.NewRouter(userSvc, authSvc, articleSvc, categorySvc, tagService, viewCountSvc, commentSvc, likeSvc, uploadCleanSvc, uploadSvc, a.cfg.Upload.BasePath)
 }
 
 // initRouter 初始化路由
