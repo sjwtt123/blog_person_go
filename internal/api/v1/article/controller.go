@@ -1,17 +1,11 @@
 package article
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
-
 	"blog/internal/middleware"
 	"blog/internal/model/dto/request"
 	"blog/internal/service"
 	"blog/pkg/logger"
 	"blog/pkg/response"
-	"blog/pkg/utils"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -20,26 +14,22 @@ import (
 
 type UploadType string
 
-const (
-	UploadTypeAvatar  UploadType = "avatar"
-	UploadTypeCover   UploadType = "cover"
-	UploadTypeArticle UploadType = "article"
-)
-
 type Controller struct {
 	articleService     service.ArticleService
 	userService        service.UserService
 	viewCountService   service.ViewCountService
 	uploadCleanService service.UploadCleanService
+	uploadService      service.UploadService
 	uploadPath         string
 }
 
-func NewController(articleService service.ArticleService, userService service.UserService, viewCountService service.ViewCountService, uploadCleanService service.UploadCleanService, uploadPath string) *Controller {
+func NewController(articleService service.ArticleService, userService service.UserService, viewCountService service.ViewCountService, uploadCleanService service.UploadCleanService, uploadService service.UploadService, uploadPath string) *Controller {
 	return &Controller{
 		articleService:     articleService,
 		userService:        userService,
 		viewCountService:   viewCountService,
 		uploadCleanService: uploadCleanService,
+		uploadService:      uploadService,
 		uploadPath:         uploadPath,
 	}
 }
@@ -150,64 +140,17 @@ func (ctrl *Controller) UploadImage(c *gin.Context) {
 		return
 	}
 
-	uploadType := UploadType(c.PostForm("type"))
+	uploadType := service.UploadType(c.PostForm("type"))
 	if uploadType == "" {
 		response.BadRequest(c, "图片类型错误")
 		return
 	}
 
-	var subDir string
-	var maxSize int64
-	var allowedExts []string
-
-	switch uploadType {
-	case UploadTypeAvatar:
-		subDir = "avatars"
-		maxSize = 2 * 1024 * 1024
-		allowedExts = []string{".jpg", ".jpeg", ".png", ".webp"}
-	case UploadTypeCover:
-		subDir = "covers"
-		maxSize = 5 * 1024 * 1024
-		allowedExts = []string{".jpg", ".jpeg", ".png", ".gif", ".webp"}
-	case UploadTypeArticle:
-		subDir = "articles"
-		maxSize = 5 * 1024 * 1024
-		allowedExts = []string{".jpg", ".jpeg", ".png", ".gif", ".webp"}
-	default:
-		response.BadRequest(c, "图片类型错误")
-		return
-	}
-
-	ext := strings.ToLower(filepath.Ext(file.Filename))
-	if !utils.Contains(allowedExts, ext) {
-		response.BadRequest(c, "不支持的文件格式")
-		return
-	}
-
-	if file.Size > maxSize {
-		response.BadRequest(c, "文件过大")
-		return
-	}
-
-	uploadDir := filepath.Join(ctrl.uploadPath, subDir)
-	if err := os.MkdirAll(uploadDir, 0755); err != nil {
-		response.InternalError(c, "创建目录失败")
-		return
-	}
-
-	randomStr, err := utils.GenerateRandomString(8)
+	url, err := ctrl.uploadService.UploadFile(file, uploadType, ctrl.uploadPath)
 	if err != nil {
-		randomStr = time.Now().Format("150405")
-	}
-	filename := time.Now().Format("20060102150405") + "_" + randomStr + ext
-	savePath := filepath.Join(uploadDir, filename)
-
-	if err := c.SaveUploadedFile(file, savePath); err != nil {
-		response.InternalError(c, "保存文件失败")
+		response.BadRequest(c, err.Error())
 		return
 	}
-
-	url := "/" + ctrl.uploadPath + "/" + filepath.ToSlash(filepath.Join(subDir, filename))
 
 	response.Success(c, gin.H{
 		"url": url,
