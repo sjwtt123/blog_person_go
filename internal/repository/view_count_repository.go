@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"time"
 
@@ -34,7 +35,7 @@ func (r *viewCountRepository) Get(articleID uint) (int64, error) {
 	ctx := context.Background()
 	val, err := r.rdb.HGet(ctx, viewCountHashKey, strconv.FormatUint(uint64(articleID), 10)).Result()
 	if err != nil {
-		if err == redis.Nil {
+		if errors.Is(err, redis.Nil) {
 			return 0, nil
 		}
 		return 0, err

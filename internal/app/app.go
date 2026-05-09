@@ -137,8 +137,8 @@ func (a *App) initDependencies() {
 	authRepo := repository.NewAuthRepository(a.redis)
 	categoryRepo := repository.NewCategoryRepository(a.mysqlDB)
 	tagRepo := repository.NewTagRepository(a.mysqlDB)
-	articleRepo := repository.NewArticleRepository(a.mysqlDB, a.redis, categoryRepo, tagRepo)
 	commentRepo := repository.NewCommentRepository(a.mysqlDB)
+	articleRepo := repository.NewArticleRepository(a.mysqlDB, a.redis, categoryRepo, tagRepo, commentRepo)
 	likeRepo := repository.NewLikeRepository(a.mysqlDB)
 	viewCountRepo := repository.NewViewCountRepository(a.redis)
 

@@ -71,7 +71,3 @@ func (r *tagRepository) Update(tag *entity.Tag) error {
 func (r *tagRepository) Delete(id uint) error {
 	return r.db.Delete(&entity.Tag{}, id).Error
 }
-
-func (r *tagRepository) UpdatePostCountInTx(tx *gorm.DB, id uint, count int) error {
-	return tx.Model(&entity.Tag{}).Where("id = ?", id).Update("post_count", count).Error
-}

@@ -2,8 +2,6 @@ package repository
 
 import (
 	"blog/internal/model/entity"
-
-	"gorm.io/gorm"
 )
 
 type TagRepository interface {
@@ -14,5 +12,4 @@ type TagRepository interface {
 	Create(tag *entity.Tag) error
 	Update(tag *entity.Tag) error
 	Delete(id uint) error
-	UpdatePostCountInTx(tx *gorm.DB, id uint, count int) error
 }

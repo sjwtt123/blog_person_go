@@ -15,16 +15,6 @@ func NewLikeRepository(db *gorm.DB) LikeRepository {
 	return &likeRepository{db: db}
 }
 
-func (r *likeRepository) Create(like *entity.Like) error {
-	return r.db.Create(like).Error
-}
-
-func (r *likeRepository) Delete(userID uint, targetID uint, targetType string) error {
-	return r.db.Model(&entity.Like{}).
-		Where("user_id = ? AND target_id = ? AND target_type = ?", userID, targetID, targetType).
-		Delete(&entity.Like{}).Error
-}
-
 func (r *likeRepository) FindByUserAndTarget(userID uint, targetID uint, targetType string) (*entity.Like, error) {
 	var like entity.Like
 	err := r.db.Where("user_id = ? AND target_id = ? AND target_type = ?", userID, targetID, targetType).

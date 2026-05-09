@@ -13,14 +13,16 @@ type articleRepository struct {
 	rdb          *redis.Client
 	categoryRepo CategoryRepository
 	tagRepo      TagRepository
+	commentRepo  CommentRepository
 }
 
-func NewArticleRepository(db *gorm.DB, rdb *redis.Client, categoryRepo CategoryRepository, tagRepo TagRepository) ArticleRepository {
+func NewArticleRepository(db *gorm.DB, rdb *redis.Client, categoryRepo CategoryRepository, tagRepo TagRepository, commentRepo CommentRepository) ArticleRepository {
 	return &articleRepository{
 		db:           db,
 		rdb:          rdb,
 		categoryRepo: categoryRepo,
 		tagRepo:      tagRepo,
+		commentRepo:  commentRepo,
 	}
 }
 
@@ -95,10 +97,6 @@ func (r *articleRepository) List(filter ArticleListFilter) ([]*entity.Article, i
 	return list, total, nil
 }
 
-func (r *articleRepository) Create(article *entity.Article) error {
-	return r.db.Create(article).Error
-}
-
 // CreateWithCascade 级联创建文章，同时更新分类和标签的文章计数
 func (r *articleRepository) CreateWithCascade(article *entity.Article) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
@@ -123,10 +121,6 @@ func (r *articleRepository) CreateWithCascade(article *entity.Article) error {
 
 		return nil
 	})
-}
-
-func (r *articleRepository) Update(article *entity.Article) error {
-	return r.db.Session(&gorm.Session{FullSaveAssociations: true}).Save(article).Error
 }
 
 // UpdateWithCascade 级联更新文章，处理分类和标签变更时的文章计数
@@ -156,11 +150,7 @@ func (r *articleRepository) UpdateWithCascade(article *entity.Article, oldCatego
 	})
 }
 
-func (r *articleRepository) Delete(id uint) error {
-	return r.db.Select("Tags").Unscoped().Delete(&entity.Article{}, id).Error
-}
-
-// DeleteWithCascade 级联删除文章，同时更新分类和标签的文章计数
+// DeleteWithCascade 级联删除文章，同时更新分类和标签的文章计数，并删除相关评论
 func (r *articleRepository) DeleteWithCascade(id uint) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		// 查询文章详情（用于更新计数）
@@ -170,6 +160,11 @@ func (r *articleRepository) DeleteWithCascade(id uint) error {
 		}
 		if article == nil {
 			return nil
+		}
+
+		// 删除文章相关评论
+		if err := r.commentRepo.DeleteByArticleIDWithCount(tx, id); err != nil {
+			return err
 		}
 
 		// 删除文章
@@ -197,50 +192,26 @@ func (r *articleRepository) DeleteWithCascade(id uint) error {
 
 // incrementCategoryPostCount 增加分类文章计数
 func (r *articleRepository) incrementCategoryPostCount(tx *gorm.DB, categoryID uint) error {
-	cat, err := r.categoryRepo.FindByID(categoryID)
-	if err != nil {
-		return err
-	}
-	if cat != nil {
-		return tx.Model(&entity.Category{}).Where("id = ?", categoryID).Update("post_count", cat.PostCount+1).Error
-	}
-	return nil
+	return tx.Model(&entity.Category{}).Where("id = ?", categoryID).Update("post_count", gorm.Expr("post_count + 1")).Error
 }
 
 // decrementCategoryPostCount 减少分类文章计数
 func (r *articleRepository) decrementCategoryPostCount(tx *gorm.DB, categoryID uint) error {
-	cat, err := r.categoryRepo.FindByID(categoryID)
-	if err != nil {
-		return err
-	}
-	if cat != nil && cat.PostCount > 0 {
-		return tx.Model(&entity.Category{}).Where("id = ?", categoryID).Update("post_count", cat.PostCount-1).Error
-	}
-	return nil
+	return tx.Model(&entity.Category{}).Where("id = ?", categoryID).
+		Where("post_count > 0").
+		Update("post_count", gorm.Expr("post_count - 1")).Error
 }
 
 // incrementTagPostCount 增加标签文章计数
 func (r *articleRepository) incrementTagPostCount(tx *gorm.DB, tagID uint) error {
-	tag, err := r.tagRepo.FindTagByID(tagID)
-	if err != nil {
-		return err
-	}
-	if tag != nil {
-		return tx.Model(&entity.Tag{}).Where("id = ?", tagID).Update("post_count", tag.PostCount+1).Error
-	}
-	return nil
+	return tx.Model(&entity.Tag{}).Where("id = ?", tagID).Update("post_count", gorm.Expr("post_count + 1")).Error
 }
 
 // decrementTagPostCount 减少标签文章计数
 func (r *articleRepository) decrementTagPostCount(tx *gorm.DB, tagID uint) error {
-	tag, err := r.tagRepo.FindTagByID(tagID)
-	if err != nil {
-		return err
-	}
-	if tag != nil && tag.PostCount > 0 {
-		return tx.Model(&entity.Tag{}).Where("id = ?", tagID).Update("post_count", tag.PostCount-1).Error
-	}
-	return nil
+	return tx.Model(&entity.Tag{}).Where("id = ?", tagID).
+		Where("post_count > 0").
+		Update("post_count", gorm.Expr("post_count - 1")).Error
 }
 
 // handleCategoryChange 处理分类变更时的文章计数调整
@@ -309,14 +280,6 @@ func (r *articleRepository) ListTimeline() ([]*entity.Article, error) {
 
 func (r *articleRepository) UpdateViewCount(id uint, count uint) error {
 	return r.db.Model(&entity.Article{}).Where("id = ?", id).Update("view_count", count).Error
-}
-
-func (r *articleRepository) UpdateCommentCount(id uint, count int) error {
-	return r.db.Model(&entity.Article{}).Where("id = ?", id).Update("comment_count", count).Error
-}
-
-func (r *articleRepository) UpdateLikeCount(id uint, count int) error {
-	return r.db.Model(&entity.Article{}).Where("id = ?", id).Update("like_count", count).Error
 }
 
 func (r *articleRepository) ListAll() ([]*entity.Article, error) {

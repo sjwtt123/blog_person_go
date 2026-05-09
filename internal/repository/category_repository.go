@@ -60,7 +60,3 @@ func (r *categoryRepository) Update(category *entity.Category) error {
 func (r *categoryRepository) Delete(id uint) error {
 	return r.db.Delete(&entity.Category{}, id).Error
 }
-
-func (r *categoryRepository) UpdatePostCountInTx(tx *gorm.DB, id uint, count int) error {
-	return tx.Model(&entity.Category{}).Where("id = ?", id).Update("post_count", count).Error
-}

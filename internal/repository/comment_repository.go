@@ -15,10 +15,6 @@ func NewCommentRepository(db *gorm.DB) CommentRepository {
 	return &commentRepository{db: db}
 }
 
-func (r *commentRepository) Create(comment *entity.Comment) error {
-	return r.db.Create(comment).Error
-}
-
 // CreateWithArticleCount 创建评论并增加文章评论数
 func (r *commentRepository) CreateWithArticleCount(comment *entity.Comment, articleID uint) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
@@ -26,7 +22,6 @@ func (r *commentRepository) CreateWithArticleCount(comment *entity.Comment, arti
 		if err := tx.Create(comment).Error; err != nil {
 			return err
 		}
-
 		// 增加文章评论数
 		return tx.Model(&entity.Article{}).Where("id = ?", articleID).Update("comment_count", gorm.Expr("comment_count + 1")).Error
 	})
@@ -109,34 +104,41 @@ func (r *commentRepository) Update(comment *entity.Comment) error {
 	return r.db.Save(comment).Error
 }
 
-func (r *commentRepository) Delete(id uint) error {
-	return r.db.Delete(&entity.Comment{}, id).Error
-}
-
-// DeleteWithArticleCount 删除评论并减少文章评论数
+// DeleteWithArticleCount 删除评论并减少文章评论数（级联删除子评论）
 func (r *commentRepository) DeleteWithArticleCount(commentID uint, articleID uint) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
-		// 删除评论
+		// 查询该评论的所有子评论数量
+		var replyCount int64
+		if err := tx.Model(&entity.Comment{}).Where("parent_id = ?", commentID).Count(&replyCount).Error; err != nil {
+			return err
+		}
+
+		// 删除子评论（如果有）
+		if replyCount > 0 {
+			if err := tx.Where("parent_id = ?", commentID).Delete(&entity.Comment{}).Error; err != nil {
+				return err
+			}
+		}
+
+		// 删除当前评论
 		if err := tx.Delete(&entity.Comment{}, commentID).Error; err != nil {
 			return err
 		}
 
-		// 减少文章评论数
-		return tx.Model(&entity.Article{}).Where("id = ?", articleID).Update("comment_count", gorm.Expr("comment_count - 1")).Error
+		// 减少文章评论数（当前评论 + 所有子评论）
+		totalDelete := int(replyCount) + 1
+		return tx.Model(&entity.Article{}).Where("id = ?", articleID).
+			Update("comment_count", gorm.Expr("comment_count - ?", totalDelete)).Error
 	})
 }
 
-func (r *commentRepository) CountByArticleID(articleID uint) (int64, error) {
-	var count int64
-	err := r.db.Model(&entity.Comment{}).
-		Where("article_id = ? AND status = 1", articleID).
-		Count(&count).Error
-	return count, err
-}
-
-func (r *commentRepository) WithTx(tx *gorm.DB) CommentRepository {
-	if tx == nil {
-		return r
+// DeleteByArticleIDWithCount 删除文章的所有评论并重置文章评论数
+func (r *commentRepository) DeleteByArticleIDWithCount(tx *gorm.DB, articleID uint) error {
+	// 删除该文章的所有评论
+	if err := tx.Where("article_id = ?", articleID).Delete(&entity.Comment{}).Error; err != nil {
+		return err
 	}
-	return &commentRepository{db: tx}
+
+	// 重置文章评论数为 0
+	return tx.Model(&entity.Article{}).Where("id = ?", articleID).Update("comment_count", 0).Error
 }
