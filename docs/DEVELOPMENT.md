@@ -243,6 +243,52 @@ func (r *xxxRepository) List(offset, limit int) ([]*entity.Xxx, int64, error) {
 }
 ```
 
+### 6.4 计数操作规范
+
+**所有计数器增减操作必须使用 `gorm.Expr` 实现原子操作，禁止先查询再更新。**
+
+**正确示例：**
+```go
+// 增加计数
+func (r *xxxRepository) IncrementCount(id uint) error {
+    return r.db.Model(&entity.Article{}).Where("id = ?", id).
+        Update("count_field", gorm.Expr("count_field + 1")).Error
+}
+
+// 减少计数（防止负数）
+func (r *xxxRepository) DecrementCount(id uint) error {
+    return r.db.Model(&entity.Article{}).Where("id = ?", id).
+        Where("count_field > 0").
+        Update("count_field", gorm.Expr("count_field - 1")).Error
+}
+```
+
+**错误示例（禁止使用）：**
+```go
+// 错误：先查询再更新，存在并发安全问题
+func (r *xxxRepository) IncrementCount(id uint) error {
+    article, err := r.FindByID(id)  // 第一次查询
+    if err != nil {
+        return err
+    }
+    newCount := article.CountField + 1  // 在 Go 中计算
+    return r.db.Model(&entity.Article{}).Where("id = ?", id).
+        Update("count_field", newCount).Error  // 第二次更新
+}
+```
+
+**使用 `gorm.Expr` 的优势：**
+1. **原子操作** - 数据库层面直接计算，无需先查询
+2. **并发安全** - 多个请求同时执行不会丢失计数
+3. **性能更好** - 只需一次数据库操作
+4. **代码更简洁** - 减少冗余的查询逻辑
+
+**常见计数场景：**
+- 文章点赞数 `like_count`
+- 文章评论数 `comment_count`
+- 分类文章数 `post_count`
+- 标签文章数 `post_count`
+
 ## 7. DTO 规范
 
 ### 7.1 请求 DTO
